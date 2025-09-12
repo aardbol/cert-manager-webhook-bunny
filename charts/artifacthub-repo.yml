@@ -9,7 +9,7 @@
 # when the hash of the last commit in the branch you set up changes. This does
 # NOT apply to ownership claim operations, which are processed immediately.
 #
-# repositoryID will be assigned when registering with Artifact Hub
+repositoryID: d7787ef5-ebdd-4e43-96dd-545d8a77b09f
 owners: # (optional, used to claim repository ownership)
   - name: o0th
     email: o0th@pm.me
