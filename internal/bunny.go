@@ -15,7 +15,7 @@ type Items struct {
 	DateCreated                   string   `json:"DateCreated"`
 	NameserversDetected           bool     `json:"NameserversDetected"`
 	CustomNameserversEnabled      bool     `json:"CustomNameserversEnabled"`
-	Nameserver1                   string   `json:"CustomNameserversEnabled"`
+	Nameserver1                   string   `json:"Nameserver1"`
 	Nameserver2                   string   `json:"Nameserver2"`
 	SoaEmail                      string   `json:"SoaEmail"`
 	NameserversNextCheck          string   `json:"NameserversNextCheck"`
@@ -38,7 +38,7 @@ type Record struct {
 	Accelerated           bool                    `json:"Accelerated"`
 	AcceleratedPullZoneId int                     `json:"AcceleratedPullZoneId"`
 	LinkName              string                  `json:"LinkName"`
-	IPGeoLocationInfo     string                  `json:"IPGeoLocationInfo"`
+	IPGeoLocationInfo     IPGeoLocationInfo       `json:"IPGeoLocationInfo"`
 	GeolocationInfo       string                  `json:"GeolocationInfo"`
 	MonitorStatus         int                     `json:"MonitorStatus"`
 	MonitorType           int                     `json:"MonitorType"`
@@ -49,6 +49,14 @@ type Record struct {
 	SmartRoutingType      int                     `json:"SmartRoutingType"`
 	Disabled              bool                    `json:"Disabled"`
 	Comment               string                  `json:"Comment"`
+}
+
+type IPGeoLocationInfo struct {
+	CountryCode      string `json:"CountryCode"`
+	Country          string `json:"Country"`
+	ASN              int    `json:"ASN"`
+	OrganizationName string `json:"OrganizationName"`
+	City             string `json:"City"`
 }
 
 type EnviromentalVariables struct {
