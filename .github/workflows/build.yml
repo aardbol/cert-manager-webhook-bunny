@@ -6,9 +6,9 @@ on:
 env:
   REGISTRY: ghcr.io
   USERNAME: ${{ github.actor }}
-  IMAGE_NAME: davidhidvegi/cert-manager-webhook-bunny
+  IMAGE_NAME: o0th/cert-manager-webhook-bunny
   # set version here for upcoming release
-  IMAGE_TAG: 1.0.1
+  IMAGE_TAG: 1.0.2
   IMAGE_TAG_DEVELOP: develop
 
 jobs:

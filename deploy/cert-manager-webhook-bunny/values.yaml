@@ -14,9 +14,9 @@ certManager:
   serviceAccountName: cert-manager
 
 image:
-  repository: ghcr.io/davidhidvegi/cert-manager-webhook-bunny
+  repository: ghcr.io/o0th/cert-manager-webhook-bunny
   # set version here for upcoming release
-  tag: 1.0.1
+  tag: 1.0.2
   # sha hash can be used to specify image version, instead of tag
   hash: ""
   pullPolicy: IfNotPresent
