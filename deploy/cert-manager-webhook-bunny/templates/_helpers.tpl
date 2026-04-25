@@ -32,25 +32,25 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.selfSignedIssuer" -}}
-{{ printf "%s-selfsign" (include "cert-manager-webhook-bunny.fullname" .) }}
+{{- printf "%s-selfsign" (include "cert-manager-webhook-bunny.fullname" .) -}}
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.rootCAIssuer" -}}
-{{ printf "%s-ca" (include "cert-manager-webhook-bunny.fullname" .) }}
+{{- printf "%s-ca" (include "cert-manager-webhook-bunny.fullname" .) -}}
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.rootCACertificate" -}}
-{{ printf "%s-ca" (include "cert-manager-webhook-bunny.fullname" .) }}
+{{- printf "%s-ca" (include "cert-manager-webhook-bunny.fullname" .) -}}
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.servingCertificate" -}}
-{{ printf "%s-webhook-tls" (include "cert-manager-webhook-bunny.fullname" .) }}
+{{- printf "%s-webhook-tls" (include "cert-manager-webhook-bunny.fullname" .) -}}
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.fullImageName" -}}
 {{- if empty .Values.image.hash -}}
-{{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
 {{- else -}}
-{{ printf "%s@%s" .Values.image.repository .Values.image.hash }}
+{{- printf "%s@%s" .Values.image.repository .Values.image.hash -}}
 {{- end -}}
 {{- end -}}

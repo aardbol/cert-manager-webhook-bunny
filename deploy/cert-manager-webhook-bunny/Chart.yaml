@@ -1,19 +1,21 @@
-apiVersion: v1
-appVersion: "1.0.2"
-version: 1.0.2
-description: A Helm chart for cert manager webhook solver for ACME DNS01 challenge via Bunny
+apiVersion: v2
 name: cert-manager-webhook-bunny
-home: https://github.com/o0th/cert-manager-webhook-bunny
+description: A Helm chart for a cert-manager ACME DNS01 webhook solver for Bunny DNS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/aardbol/cert-manager-webhook-bunny
+sources:
+  - https://github.com/aardbol/cert-manager-webhook-bunny
 icon: https://raw.githubusercontent.com/cert-manager/cert-manager/master/logo/logo.png
 keywords:
   - cert-manager
   - webhook
   - letsencrypt
   - bunny
-  - ACME
-  - DNS01
+  - acme
+  - dns01
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/maintainers: |
-    - name: o0th
-      email: o0th@pm.me
+    - name: aardbol

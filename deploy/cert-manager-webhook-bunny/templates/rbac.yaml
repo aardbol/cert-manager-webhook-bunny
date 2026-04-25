@@ -83,12 +83,12 @@ rules:
   - apiGroups:
       - "flowcontrol.apiserver.k8s.io"
     resources:
-      - 'flowschemas'
-      - 'prioritylevelconfigurations'
+      - "flowschemas"
+      - "prioritylevelconfigurations"
     verbs:
-      - 'list'
-      - 'watch'
-      - 'get'
+      - "list"
+      - "watch"
+      - "get"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -132,25 +132,36 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "cert-manager-webhook-bunny.fullname" . }}:secret-reader
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.secretAccess.namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 rules:
   - apiGroups:
       - ""
     resources:
       - "secrets"
-    {{- with .Values.secretName }}
+    {{- if .Values.secretAccess.names }}
     resourceNames:
-    {{ toYaml . | indent 4 }}
+    {{- range .Values.secretAccess.names }}
+      - {{ . | quote }}
+    {{- end }}
     {{- end }}
     verbs:
       - "get"
-      - "watch"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "cert-manager-webhook-bunny.fullname" . }}:secret-reader
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.secretAccess.namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-bunny.name" . }}
+    chart: {{ include "cert-manager-webhook-bunny.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

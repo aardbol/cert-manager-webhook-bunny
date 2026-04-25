@@ -32,7 +32,7 @@ spec:
   duration: 43800h # 5y
   issuerRef:
     name: {{ include "cert-manager-webhook-bunny.selfSignedIssuer" . }}
-  commonName: "ca.cert-manager-webhook-bunny.cert-manager"
+  commonName: "ca.{{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}"
   isCA: true
 
 ---
@@ -71,6 +71,6 @@ spec:
   issuerRef:
     name: {{ include "cert-manager-webhook-bunny.rootCAIssuer" . }}
   dnsNames:
-  - {{ include "cert-manager-webhook-bunny.fullname" . }}
-  - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}
-  - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "cert-manager-webhook-bunny.fullname" . }}
+    - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "cert-manager-webhook-bunny.fullname" . }}.{{ .Release.Namespace }}.svc
