@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,9 +19,9 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
+	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
-	"github.com/davidhidvegi/cert-manager-webhook-bunny/internal"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -39,6 +40,7 @@ func main() {
 // in secret, referenced in config by it's name
 type bunnyClientConfig struct {
 	apiKey string
+	zoneID int
 }
 
 type bunnyDNSProviderSolver struct {
@@ -50,6 +52,8 @@ type bunnyDNSProviderConfig struct {
 	SecretRef string `json:"secretRef"`
 	// optional namespace for the secret
 	SecretNamespace string `json:"secretNamespace"`
+	// Bunny DNS zone ID
+	ZoneID int `json:"zoneId"`
 }
 
 func (n *bunnyDNSProviderSolver) Name() string {
@@ -96,7 +100,13 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 		return nil, err
 	}
 
-	bunnyCfg := &bunnyClientConfig{}
+	if cfg.ZoneID <= 0 {
+		return nil, fmt.Errorf("zoneId must be specified and greater than 0")
+	}
+
+	bunnyCfg := &bunnyClientConfig{
+		zoneID: cfg.ZoneID,
+	}
 
 	if cfg.SecretNamespace != "" {
 		secretNs = cfg.SecretNamespace
@@ -118,15 +128,13 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 }
 
 func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	zones, host, getErr := getZonesAndHost(resolvedFqdn, cfg)
-	if getErr != nil {
-		return getErr
+	host, err := getHost(resolvedFqdn)
+	if err != nil {
+		return err
 	}
 
 	// Create a new TXT record
-	zoneId := zones.Items[0].Id
-	zoneIdStr := fmt.Sprintf("%d", zoneId)
-	urlOfRecords := "https://api.bunny.net/dnszone/" + zoneIdStr + "/records"
+	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records"
 
 	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
 
@@ -144,16 +152,21 @@ func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error
 }
 
 func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	zones, host, getErr := getZonesAndHost(resolvedFqdn, cfg)
-	if getErr != nil {
-		return getErr
+	host, err := getHost(resolvedFqdn)
+	if err != nil {
+		return err
+	}
+
+	records, err := getRecords(cfg)
+	if err != nil {
+		return err
 	}
 
 	// Find the TXT record and delete it
-	for _, record := range zones.Items[0].Records {
+	for _, record := range records {
 		if record.Value == key && record.Type == 3 && record.Name == host { // Type 3 is TXT record
 			// Delete the record
-			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", zones.Items[0].Id) + "/records/" + fmt.Sprintf("%d", record.Id)
+			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records/" + fmt.Sprintf("%d", record.Id)
 			_, deleteResErr := callDnsApi(urlOfRecords, "DELETE", nil, cfg)
 			if deleteResErr != nil {
 				return fmt.Errorf("Failed to delete record: %v", deleteResErr)
@@ -161,34 +174,35 @@ func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) er
 			break
 		}
 	}
+
 	return nil
 }
 
-func getZonesAndHost(resolvedFqdn string, cfg *bunnyClientConfig) (internal.ZoneResponse, string, error) {
-	rePattern := regexp.MustCompile(`^(.+)\.(([^\.]+)\.([^\.]+))\.$`)
+func getHost(resolvedFqdn string) (string, error) {
+	rePattern := regexp.MustCompile(`^(.+)\.$`)
 	match := rePattern.FindStringSubmatch(resolvedFqdn)
 	if match == nil {
-		return internal.ZoneResponse{}, "", fmt.Errorf("unable to parse host/domain out of resolved FQDN ('%s')", resolvedFqdn)
+		return "", fmt.Errorf("unable to parse host out of resolved FQDN ('%s')", resolvedFqdn)
 	}
-	host := match[1]   // something like "_acme-challenge"
-	domain := match[2] // something like "example.com"
 
-	urlOfDnsZones := "https://api.bunny.net/dnszone?page=1&perPage=1000&search=" + domain
+	return match[1], nil
+}
 
-	getResBody, getResErr := callDnsApi(urlOfDnsZones, "GET", nil, cfg)
+func getRecords(cfg *bunnyClientConfig) ([]internal.Record, error) {
+	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
+
+	getResBody, getResErr := callDnsApi(urlOfRecords, "GET", nil, cfg)
 	if getResErr != nil {
-		return internal.ZoneResponse{}, "", fmt.Errorf("Failed to request zones: %v", getResErr)
+		return nil, fmt.Errorf("Failed to request records: %v", getResErr)
 	}
 
-	zones := internal.ZoneResponse{}
-	zonesReadErr := json.Unmarshal(getResBody, &zones)
-	if zonesReadErr != nil {
-		return internal.ZoneResponse{}, "", fmt.Errorf("Unable to unmarshal response: %v", zonesReadErr)
+	zone := internal.Zone{}
+	readErr := json.Unmarshal(getResBody, &zone)
+	if readErr != nil {
+		return nil, fmt.Errorf("Unable to unmarshal response: %v", readErr)
 	}
-	if zones.TotalItems != 1 {
-		return internal.ZoneResponse{}, "", fmt.Errorf("wrong number of zones in response %d must be exactly = 1", zones.TotalItems)
-	}
-	return zones, host, nil
+
+	return zone.Records, nil
 }
 
 func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
@@ -201,7 +215,9 @@ func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]b
 	req.Header.Set("accept", "application/json")
 	req.Header.Set("AccessKey", cfg.apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -214,7 +230,11 @@ func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]b
 		}
 	}()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("unable to read response body: %v", readErr)
+	}
+
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
 		return respBody, nil
 	}
