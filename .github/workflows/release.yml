@@ -1,0 +1,119 @@
+name: Release OCI Artifacts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - deploy/cert-manager-webhook-bunny/Chart.yaml
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CHART_DIR: deploy/cert-manager-webhook-bunny
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check version bump
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          chart_version=$(yq '.version' ${{ env.CHART_DIR }}/Chart.yaml)
+          app_version=$(yq '.appVersion' ${{ env.CHART_DIR }}/Chart.yaml)
+          
+          echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
+          echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
+          
+          if gh release view "v$chart_version" > /dev/null 2>&1; then
+            echo "skip_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+          latest_release=$(gh release list --limit 1 | awk '{print $1}' | sed 's/^v//')
+          if [ -z "$latest_release" ]; then
+            latest_release="0.0.0"
+          fi
+          
+          highest_version=$(printf '%s\n' "$latest_release" "$chart_version" | sort -V | tail -n1)
+          
+          if [ "$highest_version" != "$chart_version" ]; then
+            echo "skip_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+          is_prerelease="false"
+          if [[ "$chart_version" == *-* ]]; then
+            is_prerelease="true"
+          fi
+          
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
+          echo "skip_release=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        if: steps.check.outputs.skip_release == 'false'
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: |
+            ${{ steps.check.outputs.app_version }}
+            ${{ steps.check.outputs.is_prerelease == 'false' && 'latest' || '' }}
+          containerfiles: ./Containerfile
+          platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ env.IMAGE_NAME }}
+            org.opencontainers.image.version=${{ steps.check.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.skip_release == 'false'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: steps.check.outputs.skip_release == 'false'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+      - name: Log in to Helm OCI registry
+        if: steps.check.outputs.skip_release == 'false'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u "${{ github.actor }}" --password-stdin
+
+      - name: Package chart
+        if: steps.check.outputs.skip_release == 'false'
+        run: |
+          mkdir -p dist
+          helm package ${{ env.CHART_DIR }} --destination dist
+
+      - name: Push chart to GHCR OCI
+        if: steps.check.outputs.skip_release == 'false'
+        run: helm push dist/*.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+
+      - name: Create GitHub release
+        if: steps.check.outputs.skip_release == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.check.outputs.chart_version }}" \
+            dist/*.tgz \
+            --generate-notes \
+            --title "v${{ steps.check.outputs.chart_version }}" \
+            ${{ steps.check.outputs.is_prerelease == 'true' && '--prerelease' || '' }}

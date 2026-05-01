@@ -1,0 +1,42 @@
+name: PR Validate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Verify Containerfile build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          containerfiles: ./Containerfile
+          image: cert-manager-webhook-bunny-test
+          tags: latest
+          platforms: linux/amd64
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config .github/ct.yml
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Run chart-testing (install)
+        run: ct install --config .github/ct.yml
