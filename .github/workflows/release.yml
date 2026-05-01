@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - deploy/cert-manager-webhook-bunny/Chart.yaml
+  workflow_dispatch:
 
 permissions:
   contents: write
