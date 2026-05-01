@@ -51,7 +51,25 @@ func (n *bunnyDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := addTxtRecord(cfg, ch.ResolvedFQDN, ch.Key); err != nil {
+
+	host, err := getHost(cfg, ch.ResolvedFQDN)
+	if err != nil {
+		return err
+	}
+
+	records, err := getRecords(cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		if r.Type == 3 && r.Name == host && r.Value == ch.Key {
+			klog.Infof("TXT record already exists for domain '%s', skipping creation", ch.DNSName)
+			return nil
+		}
+	}
+
+	if err := addTxtRecord(cfg, host, ch.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", ch.DNSName)

@@ -21,24 +21,19 @@ type bunnyClientConfig struct {
 	zoneID int
 }
 
-func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(cfg, resolvedFqdn)
-	if err != nil {
-		return err
-	}
-
+func addTxtRecord(cfg *bunnyClientConfig, host string, key string) error {
 	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records"
 	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
 
 	putResBody, putResErr := callDnsApi(urlOfRecords, "PUT", payload, cfg)
 	if putResErr != nil {
-		return fmt.Errorf("Failed to create record: %v", putResErr)
+		return fmt.Errorf("failed to create record: %v", putResErr)
 	}
 
 	record := internal.Record{}
 	recordReadErr := json.Unmarshal(putResBody, &record)
 	if recordReadErr != nil {
-		return fmt.Errorf("Unable to unmarshal response: %v", recordReadErr)
+		return fmt.Errorf("unable to unmarshal response: %v", recordReadErr)
 	}
 	return nil
 }
