@@ -15,8 +15,7 @@ solver configuration.
 Usage
 -----
 
-For the Bunny-specific configuration, you will need to create a Kubernetes
-Secret containing the API key.
+For the Bunny-specific configuration, you will need to create a Kubernetes Secret containing the API key.
 
 You can do it like this:
 
@@ -24,9 +23,8 @@ You can do it like this:
 kubectl create secret generic bunny-secret -n cert-manager --from-literal=api-key=<api-key-from-bunny-dashboard>
 ```
 
-You can prepend the command with a space so that it is not saved in your shell
-history, depending on shell support. Prefer using an external secret manager
-where possible.
+You can prepend the command with a space so that it is not saved in your shell history, depending on shell support. 
+Prefer using an external secret manager where possible.
 
 After creating the Secret, configure your ``Issuer`` or ``ClusterIssuer``.
 The example below assumes the Secret is called ``bunny-api`` and located
@@ -72,18 +70,17 @@ For more details, please refer to https://cert-manager.io/docs/configuration/acm
 Helm installation
 -----------------
 
-Install from the Helm repository:
+Install directly from the GitHub Container Registry (OCI):
 
 ```sh
-helm repo add cert-manager-webhook-bunny https://aardbol.github.io/cert-manager-webhook-bunny/charts/
-helm repo update
-helm install cert-manager-webhook-bunny cert-manager-webhook-bunny/cert-manager-webhook-bunny -n cert-manager
+helm install cert-manager-webhook-bunny oci://ghcr.io/aardbol/charts/cert-manager-webhook-bunny --version <CHART_VERSION> -n cert-manager
 ```
 
 You can also override values explicitly:
 
 ```sh
-helm install cert-manager-webhook-bunny cert-manager-webhook-bunny/cert-manager-webhook-bunny \
+helm install cert-manager-webhook-bunny oci://ghcr.io/aardbol/charts/cert-manager-webhook-bunny \
+  --version <CHART_VERSION> \
   -n cert-manager \
   --set groupName=acme.aardbol.dev \
   --set secretAccess.namespace=cert-manager
