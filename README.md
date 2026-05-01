@@ -38,7 +38,7 @@ spec:
     solvers:
     - dns01:
         webhook:
-          groupName: acme.aardbol.dev
+          groupName: bunny.aardbol.dev
           solverName: bunny
           config:
             secretRef: bunny-api
