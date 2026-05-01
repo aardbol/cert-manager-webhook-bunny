@@ -13,14 +13,16 @@ Usage
 -----
 
 For the bunny-specific configuration, you will need a Kubernetes secret containing the API key.
+Ideally, you should provision this secret using an external secret manager.
 
-Ideally, you should provision this secret using an external secret manager like Bitwarden Secret Manager. If you need to create it manually for testing, use the following command:
+If you need to create it manually for testing, use the following command:
 
 ```sh
  kubectl create secret generic bunny-api -n cert-manager --from-literal=api-key=<api-key-from-bunny-dashboard>
 ```
 
-After creating the secret, configure your ``ClusterIssuer`` to have the following configuration (assuming the secret is called "bunny-api" and located in namespace "cert-manager"):
+After creating the secret, configure your ``ClusterIssuer`` to have the following configuration (assuming the secret is
+called "bunny-api" and located in namespace "cert-manager"):
 
 ```yml
 apiVersion: cert-manager.io/v1
