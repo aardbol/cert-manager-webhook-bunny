@@ -115,6 +115,9 @@ jobs:
           mkdir -p dist
           helm package ${{ env.CHART_DIR }} --destination dist
 
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
+
       - name: Push Artifact Hub metadata
         if: steps.check.outputs.skip_release == 'false'
         run: |
