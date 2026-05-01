@@ -1,7 +1,5 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/aardbol-cert-manager-webhook-bunny)](https://artifacthub.io/packages/search?repo=aardbol-cert-manager-webhook-bunny)
 [![Go Report Card](https://goreportcard.com/badge/github.com/aardbol/cert-manager-webhook-bunny)](https://goreportcard.com/report/github.com/aardbol/cert-manager-webhook-bunny)
-[![License](https://img.shields.io/github/license/aardbol/cert-manager-webhook-bunny)](https://github.com/aardbol/cert-manager-webhook-bunny/blob/main/LICENSE)
-![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/aardbol/cert-manager-webhook-bunny)
 
 cert-manager-webhook-bunny
 ===========================
