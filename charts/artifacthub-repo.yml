@@ -9,10 +9,10 @@
 # when the hash of the last commit in the branch you set up changes. This does
 # NOT apply to ownership claim operations, which are processed immediately.
 #
-repositoryID: d7787ef5-ebdd-4e43-96dd-545d8a77b09f
+repositoryID: d340b696-47cc-41f7-8562-ad51d606e130
 owners: # (optional, used to claim repository ownership)
-  - name: o0th
-    email: o0th@pm.me
+  - name: aardbol
+    email: aardbol@github.repo
 # ignore: # (optional, packages that should not be indexed by Artifact Hub)
 #   - name: package1
 #   - name: package2 # Exact match

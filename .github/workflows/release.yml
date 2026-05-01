@@ -104,6 +104,14 @@ jobs:
           mkdir -p dist
           helm package ${{ env.CHART_DIR }} --destination dist
 
+      - name: Push Artifact Hub metadata
+        if: steps.check.outputs.skip_release == 'false'
+        run: |
+          oras login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+          oras push ghcr.io/${{ github.repository_owner }}/charts/cert-manager-webhook-bunny:artifacthub.io \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+
       - name: Push chart to GHCR OCI
         if: steps.check.outputs.skip_release == 'false'
         run: helm push dist/*.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
