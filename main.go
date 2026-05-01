@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -128,14 +127,12 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 }
 
 func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(resolvedFqdn)
+	host, err := getHost(cfg, resolvedFqdn)
 	if err != nil {
 		return err
 	}
 
-	// Create a new TXT record
 	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records"
-
 	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
 
 	putResBody, putResErr := callDnsApi(urlOfRecords, "PUT", payload, cfg)
@@ -152,7 +149,7 @@ func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error
 }
 
 func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(resolvedFqdn)
+	host, err := getHost(cfg, resolvedFqdn)
 	if err != nil {
 		return err
 	}
@@ -162,10 +159,8 @@ func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) er
 		return err
 	}
 
-	// Find the TXT record and delete it
 	for _, record := range records {
 		if record.Value == key && record.Type == 3 && record.Name == host { // Type 3 is TXT record
-			// Delete the record
 			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records/" + fmt.Sprintf("%d", record.Id)
 			_, deleteResErr := callDnsApi(urlOfRecords, "DELETE", nil, cfg)
 			if deleteResErr != nil {
@@ -178,14 +173,58 @@ func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) er
 	return nil
 }
 
-func getHost(resolvedFqdn string) (string, error) {
-	rePattern := regexp.MustCompile(`^(.+)\.$`)
-	match := rePattern.FindStringSubmatch(resolvedFqdn)
-	if match == nil {
+func getHost(cfg *bunnyClientConfig, resolvedFqdn string) (string, error) {
+	zoneName, err := getZoneDomain(cfg)
+	if err != nil {
+		return "", err
+	}
+
+	return getHostFromZone(resolvedFqdn, zoneName)
+}
+
+func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
+	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
+	if fqdn == "" {
 		return "", fmt.Errorf("unable to parse host out of resolved FQDN ('%s')", resolvedFqdn)
 	}
 
-	return match[1], nil
+	zoneName = strings.TrimSuffix(strings.TrimSpace(strings.ToLower(zoneName)), ".")
+	if zoneName == "" {
+		return "", fmt.Errorf("zone domain is empty")
+	}
+
+	if fqdn == zoneName {
+		return "", fmt.Errorf("resolved FQDN ('%s') points to zone apex, expected challenge record below zone", resolvedFqdn)
+	}
+
+	suffix := "." + zoneName
+	if !strings.HasSuffix(fqdn, suffix) {
+		return "", fmt.Errorf("resolved FQDN ('%s') is not within zone '%s'", resolvedFqdn, zoneName)
+	}
+
+	host := strings.TrimSuffix(fqdn, suffix)
+	if host == "" {
+		return "", fmt.Errorf("unable to derive relative host from resolved FQDN ('%s')", resolvedFqdn)
+	}
+
+	return host, nil
+}
+
+func getZoneDomain(cfg *bunnyClientConfig) (string, error) {
+	urlOfZone := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
+
+	getResBody, getResErr := callDnsApi(urlOfZone, "GET", nil, cfg)
+	if getResErr != nil {
+		return "", fmt.Errorf("Failed to request zone: %v", getResErr)
+	}
+
+	zone := internal.Zone{}
+	readErr := json.Unmarshal(getResBody, &zone)
+	if readErr != nil {
+		return "", fmt.Errorf("Unable to unmarshal response: %v", readErr)
+	}
+
+	return zone.Domain, nil
 }
 
 func getRecords(cfg *bunnyClientConfig) ([]internal.Record, error) {

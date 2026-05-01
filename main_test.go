@@ -6,28 +6,53 @@ import (
 	"testing"
 )
 
-func TestGetHost(t *testing.T) {
+func TestGetHostFromZone(t *testing.T) {
 	tests := []struct {
 		name         string
 		resolvedFQDN string
+		zoneName     string
 		expectedHost string
 		expectErr    bool
 	}{
 		{
 			name:         "root challenge",
 			resolvedFQDN: "_acme-challenge.example.com.",
-			expectedHost: "_acme-challenge.example.com",
+			zoneName:     "example.com",
+			expectedHost: "_acme-challenge",
 			expectErr:    false,
 		},
 		{
 			name:         "delegated challenge",
 			resolvedFQDN: "_acme-challenge.foo.example.com.",
-			expectedHost: "_acme-challenge.foo.example.com",
+			zoneName:     "example.com",
+			expectedHost: "_acme-challenge.foo",
 			expectErr:    false,
 		},
 		{
-			name:         "missing trailing dot",
+			name:         "nested zone",
+			resolvedFQDN: "_acme-challenge.archive.mainnet.qfnode.net.",
+			zoneName:     "qfnode.net",
+			expectedHost: "_acme-challenge.archive.mainnet",
+			expectErr:    false,
+		},
+		{
+			name:         "missing trailing dot is accepted",
 			resolvedFQDN: "_acme-challenge.example.com",
+			zoneName:     "example.com",
+			expectedHost: "_acme-challenge",
+			expectErr:    false,
+		},
+		{
+			name:         "outside zone",
+			resolvedFQDN: "_acme-challenge.example.org.",
+			zoneName:     "example.com",
+			expectedHost: "",
+			expectErr:    true,
+		},
+		{
+			name:         "zone apex",
+			resolvedFQDN: "example.com.",
+			zoneName:     "example.com",
 			expectedHost: "",
 			expectErr:    true,
 		},
@@ -35,7 +60,7 @@ func TestGetHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			host, err := getHost(tt.resolvedFQDN)
+			host, err := getHostFromZone(tt.resolvedFQDN, tt.zoneName)
 			if tt.expectErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

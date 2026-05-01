@@ -1,6 +1,7 @@
 package internal
 
 type Zone struct {
+	Domain  string   `json:"Domain"`
 	Records []Record `json:"Records"`
 }
 
