@@ -36,13 +36,13 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2
 
-      - name: Run chart-testing (lint)
+      - name: Run chart-testing lint
         run: ct lint --config .github/ct.yml
 
       - name: Create kind cluster
         run: kind create cluster
 
-      - name: Add and install cert-manager via Helm
+      - name: Install cert-manager
         run: |
           helm repo add jetstack https://charts.jetstack.io --force-update
           helm install cert-manager jetstack/cert-manager \
@@ -53,5 +53,5 @@ jobs:
 
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=120s
 
-      - name: Run chart-testing (install)
+      - name: Run chart-testing install
         run: ct install --config .github/ct.yml
