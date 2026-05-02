@@ -26,7 +26,7 @@ jobs:
         run: make test
 
       - name: Verify Containerfile build
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
         with:
           containerfiles: ./Containerfile
           image: cert-manager-webhook-bunny-test
@@ -34,7 +34,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
 
       - name: Run chart-testing lint
         run: ct lint --config .github/ct.yml
