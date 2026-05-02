@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	ApiUrl          = "https://api.bunny.io/dnszone/"
+	ApiUrl          = "https://api.bunny.net/dnszone/"
 	RecordsEndpoint = "/records"
 	RecordTypeTXT   = 3
 )
