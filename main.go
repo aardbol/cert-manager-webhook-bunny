@@ -36,11 +36,13 @@ type bunnyDNSProviderSolver struct {
 // bunnyDNSProviderConfig is the user-facing configuration for this webhook solver,
 // typically provided in the cert-manager Issuer or ClusterIssuer resource.
 type bunnyDNSProviderConfig struct {
-	// name of the secret which contains Bunny credentials
+	// SecretRef is the name of the secret which contains Bunny credentials
 	SecretRef string `json:"secretRef"`
-	// optional namespace for the secret
+	// SecretNamespace contains an optional namespace for the secret
 	SecretNamespace string `json:"secretNamespace"`
-	// Bunny DNS zone ID
+	// SecretKey contains an optional name of the secret, defaults to "api-key"
+	SecretKey string `json:"secretKey"`
+	// ZoneID contains the Bunny DNS zone ID
 	ZoneID int `json:"zoneId"`
 }
 
@@ -140,18 +142,23 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 		secretNs = ch.ResourceNamespace
 	}
 
+	key := cfg.SecretKey
+	if key == "" {
+		key = "api-key"
+	}
+
 	ctx := context.Background()
 	sec, err := n.client.CoreV1().Secrets(secretNs).Get(ctx, cfg.SecretRef, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("unable to get secret %q/%q: %w", secretNs, cfg.SecretRef, err)
 	}
 
-	apiKey, err := stringFromSecretData(sec.Data, "api-key")
+	apiKey, err := stringFromSecretData(sec.Data, key)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get api-key from secret %q/%q: %w", secretNs, cfg.SecretRef, err)
+		return nil, fmt.Errorf("unable to get key %q from secret %q/%q: %w", key, secretNs, cfg.SecretRef, err)
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("api-key in secret %q/%q is empty", secretNs, cfg.SecretRef)
+		return nil, fmt.Errorf("key %q in secret %q/%q is empty", key, secretNs, cfg.SecretRef)
 	}
 
 	return &bunnyClientConfig{
