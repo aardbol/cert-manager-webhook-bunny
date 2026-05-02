@@ -103,6 +103,9 @@ func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 	}
 
 	deleted, err := deleteTxtRecord(cfg, zone.Records, host, ch.Key)
+	if err != nil {
+		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
+	}
 	if deleted > 0 {
 		klog.Infof("successfully cleaned up challenge for domain '%s' (%d record(s) removed)", ch.DNSName, deleted)
 	} else {
