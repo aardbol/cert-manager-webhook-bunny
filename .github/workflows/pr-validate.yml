@@ -40,7 +40,18 @@ jobs:
         run: ct lint --config .github/ct.yml
 
       - name: Create kind cluster
-        uses: helm/kind-action@v1
+        run: kind create cluster
+
+      - name: Add and install cert-manager via Helm
+        run: |
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager jetstack/cert-manager \
+            --namespace cert-manager \
+            --create-namespace \
+            --version v1.19.5 \
+            --set crds.enabled=true
+
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=120s
 
       - name: Run chart-testing (install)
         run: ct install --config .github/ct.yml
