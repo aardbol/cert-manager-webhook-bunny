@@ -11,3 +11,11 @@ type Record struct {
 	Value string `json:"Value"`
 	Name  string `json:"Name"`
 }
+
+// CreateRecordRequest is the request body for creating a Bunny DNS record.
+type CreateRecordRequest struct {
+	Type  int    `json:"Type"`
+	Ttl   int    `json:"Ttl"`
+	Value string `json:"Value"`
+	Name  string `json:"Name"`
+}

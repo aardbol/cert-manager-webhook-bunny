@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,63 +15,53 @@ import (
 	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 )
 
+const (
+	ApiUrl          = "https://api.bunny.io/dnszone/"
+	RecordsEndpoint = "/records"
+)
+
 // bunnyClientConfig contains the parameters required to interact with Bunny API, should be located in a Secret
 type bunnyClientConfig struct {
 	apiKey string
 	zoneID int
 }
 
+// addTxtRecord creates a TXT record in the Bunny zone. The host argument
+// must already be the relative name within the zone.
 func addTxtRecord(cfg *bunnyClientConfig, host string, key string) error {
-	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records"
-	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
-
-	putResBody, putResErr := callDnsApi(urlOfRecords, "PUT", payload, cfg)
-	if putResErr != nil {
-		return fmt.Errorf("failed to create record: %v", putResErr)
+	payload := internal.CreateRecordRequest{Type: 3, Ttl: 120, Value: key, Name: host}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal record payload: %w", err)
 	}
 
-	record := internal.Record{}
-	recordReadErr := json.Unmarshal(putResBody, &record)
-	if recordReadErr != nil {
-		return fmt.Errorf("unable to unmarshal response: %v", recordReadErr)
+	_, err = callDnsApi(RecordsEndpoint, "PUT", bytes.NewReader(data), cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create record: %w", err)
 	}
 	return nil
 }
 
-func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(cfg, resolvedFqdn)
-	if err != nil {
-		return err
-	}
-
-	records, err := getRecords(cfg)
-	if err != nil {
-		return err
-	}
-
+// deleteTxtRecord removes all matching TXT records from the provided slice.
+// It does not perform any API reads; the caller must supply the records.
+func deleteTxtRecord(cfg *bunnyClientConfig, records []internal.Record, host string, key string) (int, error) {
+	deleted := 0
 	for _, record := range records {
-		if record.Value == key && record.Type == 3 && record.Name == host { // Type 3 is TXT record
-			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records/" + fmt.Sprintf("%d", record.Id)
-			_, deleteResErr := callDnsApi(urlOfRecords, "DELETE", nil, cfg)
-			if deleteResErr != nil {
-				return fmt.Errorf("Failed to delete record: %v", deleteResErr)
+		if record.Value == key && record.Type == 3 && record.Name == host {
+			urlOfRecords := RecordsEndpoint + "/" + fmt.Sprintf("%d", record.Id)
+			if _, err := callDnsApi(urlOfRecords, "DELETE", nil, cfg); err != nil {
+				return deleted, fmt.Errorf("failed to delete record %d: %w", record.Id, err)
 			}
-			break
+			deleted++
 		}
 	}
-
-	return nil
+	return deleted, nil
 }
 
-func getHost(cfg *bunnyClientConfig, resolvedFqdn string) (string, error) {
-	zoneName, err := getZoneDomain(cfg)
-	if err != nil {
-		return "", err
-	}
-
-	return getHostFromZone(resolvedFqdn, zoneName)
-}
-
+// getHostFromZone derives the relative DNS host name from a fully-qualified
+// domain name and a zone domain. It normalizes both inputs, validates that
+// the FQDN is a descendant of the zone (not the apex), and returns the host
+// portion without the zone suffix.
 func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
 	if fqdn == "" {
@@ -100,47 +90,31 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	return host, nil
 }
 
-func getZoneDomain(cfg *bunnyClientConfig) (string, error) {
-	urlOfZone := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
-
-	getResBody, getResErr := callDnsApi(urlOfZone, "GET", nil, cfg)
-	if getResErr != nil {
-		return "", fmt.Errorf("Failed to request zone: %v", getResErr)
+// getZone fetches the full Bunny DNS zone object for the configured zoneID.
+// The returned Zone contains both the authoritative Domain name and the
+// current list of Records, allowing callers to derive the relative host and
+// check for existing TXT records with a single API call.
+func getZone(cfg *bunnyClientConfig) (*internal.Zone, error) {
+	body, err := callDnsApi("", "GET", nil, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to request zone: %w", err)
 	}
-
-	zone := internal.Zone{}
-	readErr := json.Unmarshal(getResBody, &zone)
-	if readErr != nil {
-		return "", fmt.Errorf("Unable to unmarshal response: %v", readErr)
+	zone := &internal.Zone{}
+	if err := json.Unmarshal(body, zone); err != nil {
+		return nil, fmt.Errorf("unable to unmarshal zone response: %w", err)
 	}
-
-	return zone.Domain, nil
+	return zone, nil
 }
 
-func getRecords(cfg *bunnyClientConfig) ([]internal.Record, error) {
-	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
-
-	getResBody, getResErr := callDnsApi(urlOfRecords, "GET", nil, cfg)
-	if getResErr != nil {
-		return nil, fmt.Errorf("Failed to request records: %v", getResErr)
-	}
-
-	zone := internal.Zone{}
-	readErr := json.Unmarshal(getResBody, &zone)
-	if readErr != nil {
-		return nil, fmt.Errorf("Unable to unmarshal response: %v", readErr)
-	}
-
-	return zone.Records, nil
-}
-
-func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
+// callDnsApi executes a Bunny DNS API request.
+func callDnsApi(urlSuffix, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
 	ctx := context.Background()
+	url := ApiUrl + fmt.Sprintf("%d", cfg.zoneID) + urlSuffix
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return []byte{}, fmt.Errorf("unable to execute request %v", err)
+		return nil, fmt.Errorf("unable to build request: %w", err)
 	}
-	req.Header.Add("content-type", "application/json")
+	req.Header.Set("content-type", "application/json")
 	req.Header.Set("accept", "application/json")
 	req.Header.Set("AccessKey", cfg.apiKey)
 
@@ -149,26 +123,24 @@ func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]b
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			klog.Fatal(err)
+		if cerr := resp.Body.Close(); cerr != nil {
+			klog.Warningf("failed to close response body for %s %s: %v", method, urlSuffix, cerr)
 		}
 	}()
 
 	respBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return nil, fmt.Errorf("unable to read response body: %v", readErr)
+		return nil, fmt.Errorf("unable to read response body: %w", readErr)
 	}
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return respBody, nil
 	}
 
-	text := "Error calling API status:" + resp.Status + " url: " + url + " method: " + method
-	klog.Error(text)
-	return nil, errors.New(text)
+	return nil, fmt.Errorf("API error: status=%s, url=%s, method=%s, body=%s",
+		resp.Status, urlSuffix, method, string(respBody))
 }
