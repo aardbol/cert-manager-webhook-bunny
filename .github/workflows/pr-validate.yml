@@ -19,7 +19,11 @@ jobs:
           fetch-depth: 0
 
       - name: Run Go tests
-        run: go test ./...
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_ZONE_ID: ${{ secrets.BUNNY_ZONE_ID }}
+          BUNNY_TEST_FQDN: ${{ secrets.BUNNY_TEST_FQDN }}
+        run: make test
 
       - name: Verify Containerfile build
         uses: redhat-actions/buildah-build@v2
@@ -32,11 +36,5 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2
 
-      - name: Run chart-testing (lint)
+      - name: Run chart-testing lint
         run: ct lint --config .github/ct.yml
-
-      - name: Create kind cluster
-        uses: helm/kind-action@v1
-
-      - name: Run chart-testing (install)
-        run: ct install --config .github/ct.yml

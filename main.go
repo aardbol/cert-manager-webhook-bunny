@@ -3,13 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +13,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 )
@@ -35,23 +29,20 @@ func main() {
 	)
 }
 
-// These are the things required to interact with Bunny API, should be located
-// in secret, referenced in config by it's name
-type bunnyClientConfig struct {
-	apiKey string
-	zoneID int
-}
-
 type bunnyDNSProviderSolver struct {
 	client *kubernetes.Clientset
 }
 
+// bunnyDNSProviderConfig is the user-facing configuration for this webhook solver,
+// typically provided in the cert-manager Issuer or ClusterIssuer resource.
 type bunnyDNSProviderConfig struct {
-	// name of the secret which contains Bunny credentials
+	// SecretRef is the name of the secret which contains Bunny credentials
 	SecretRef string `json:"secretRef"`
-	// optional namespace for the secret
+	// SecretNamespace contains an optional namespace for the secret
 	SecretNamespace string `json:"secretNamespace"`
-	// Bunny DNS zone ID
+	// SecretKey contains an optional name of the secret, defaults to "api-key"
+	SecretKey string `json:"secretKey"`
+	// ZoneID contains the Bunny DNS zone ID
 	ZoneID int `json:"zoneId"`
 }
 
@@ -59,31 +50,71 @@ func (n *bunnyDNSProviderSolver) Name() string {
 	return "bunny"
 }
 
+// Present creates the ACME DNS-01 TXT record if it does not already exist.
+// It is idempotent: if a matching TXT record is found in the zone, it returns
+// immediately without issuing another Bunny API write.
 func (n *bunnyDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := n.getConfig(ch)
 	if err != nil {
 		return err
 	}
-	if err := addTxtRecord(cfg, ch.ResolvedFQDN, ch.Key); err != nil {
+
+	zone, err := getZone(cfg)
+	if err != nil {
+		return err
+	}
+
+	host, err := getHostFromZone(ch.ResolvedFQDN, zone.Domain)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range zone.Records {
+		if r.Type == 3 && r.Name == host && r.Value == ch.Key {
+			klog.Infof("TXT record already exists for domain '%s', skipping creation", ch.DNSName)
+			return nil
+		}
+	}
+
+	if err := addTxtRecord(cfg, host, ch.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", ch.DNSName)
 	return nil
 }
 
+// CleanUp removes every Bunny TXT record that matches the challenge key,
+// relative host name, and record type. If no matching record exists, it
+// logs and returns successfully so that retries or stale cleanups do not fail.
 func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := n.getConfig(ch)
 	if err != nil {
 		return err
 	}
-	if err := deleteTxtRecord(cfg, ch.ResolvedFQDN, ch.Key); err != nil {
+
+	zone, err := getZone(cfg)
+	if err != nil {
 		return err
 	}
-	klog.Infof("successfully cleaned up challenge for domain '%s'", ch.DNSName)
+
+	host, err := getHostFromZone(ch.ResolvedFQDN, zone.Domain)
+	if err != nil {
+		return err
+	}
+
+	deleted, err := deleteTxtRecord(cfg, zone.Records, host, ch.Key)
+	if err != nil {
+		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
+	}
+	if deleted > 0 {
+		klog.Infof("successfully cleaned up challenge for domain '%s' (%d record(s) removed)", ch.DNSName, deleted)
+	} else {
+		klog.Infof("no matching TXT record found for domain '%s', cleanup skipped", ch.DNSName)
+	}
 	return nil
 }
 
-func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-chan struct{}) error {
 	cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
 		return err
@@ -92,8 +123,10 @@ func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopC
 	return nil
 }
 
+// getConfig builds the runtime Bunny client configuration from the challenge request.
+// It validates that zoneId and secretRef are present, resolves the secret namespace,
+// and extracts the API key from the referenced Kubernetes secret.
 func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunnyClientConfig, error) {
-	var secretNs string
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return nil, err
@@ -103,202 +136,59 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 		return nil, fmt.Errorf("zoneId must be specified and greater than 0")
 	}
 
-	bunnyCfg := &bunnyClientConfig{
-		zoneID: cfg.ZoneID,
+	if cfg.SecretRef == "" {
+		return nil, fmt.Errorf("secretRef must be specified")
 	}
 
-	if cfg.SecretNamespace != "" {
-		secretNs = cfg.SecretNamespace
-	} else {
+	secretNs := cfg.SecretNamespace
+	if secretNs == "" {
 		secretNs = ch.ResourceNamespace
 	}
 
-	sec, err := n.client.CoreV1().Secrets(secretNs).Get(context.TODO(), cfg.SecretRef, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("unable to get secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
+	key := cfg.SecretKey
+	if key == "" {
+		key = "api-key"
 	}
 
-	bunnyCfg.apiKey, err = stringFromSecretData(&sec.Data, "api-key")
-	if err != nil {
-		return nil, fmt.Errorf("unable to get 'api-key' from secret '%s/%s': %v", secretNs, cfg.SecretRef, err)
-	}
-
-	return bunnyCfg, nil
-}
-
-func addTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(cfg, resolvedFqdn)
-	if err != nil {
-		return err
-	}
-
-	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records"
-	payload := strings.NewReader("{\"Type\":3,\"Ttl\":120,\"Value\":\"" + key + "\",\"Name\":\"" + host + "\"}")
-
-	putResBody, putResErr := callDnsApi(urlOfRecords, "PUT", payload, cfg)
-	if putResErr != nil {
-		return fmt.Errorf("Failed to create record: %v", putResErr)
-	}
-
-	record := internal.Record{}
-	recordReadErr := json.Unmarshal(putResBody, &record)
-	if recordReadErr != nil {
-		return fmt.Errorf("Unable to unmarshal response: %v", recordReadErr)
-	}
-	return nil
-}
-
-func deleteTxtRecord(cfg *bunnyClientConfig, resolvedFqdn string, key string) error {
-	host, err := getHost(cfg, resolvedFqdn)
-	if err != nil {
-		return err
-	}
-
-	records, err := getRecords(cfg)
-	if err != nil {
-		return err
-	}
-
-	for _, record := range records {
-		if record.Value == key && record.Type == 3 && record.Name == host { // Type 3 is TXT record
-			urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID) + "/records/" + fmt.Sprintf("%d", record.Id)
-			_, deleteResErr := callDnsApi(urlOfRecords, "DELETE", nil, cfg)
-			if deleteResErr != nil {
-				return fmt.Errorf("Failed to delete record: %v", deleteResErr)
-			}
-			break
-		}
-	}
-
-	return nil
-}
-
-func getHost(cfg *bunnyClientConfig, resolvedFqdn string) (string, error) {
-	zoneName, err := getZoneDomain(cfg)
-	if err != nil {
-		return "", err
-	}
-
-	return getHostFromZone(resolvedFqdn, zoneName)
-}
-
-func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
-	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
-	if fqdn == "" {
-		return "", fmt.Errorf("unable to parse host out of resolved FQDN ('%s')", resolvedFqdn)
-	}
-
-	zoneName = strings.TrimSuffix(strings.TrimSpace(strings.ToLower(zoneName)), ".")
-	if zoneName == "" {
-		return "", fmt.Errorf("zone domain is empty")
-	}
-
-	if fqdn == zoneName {
-		return "", fmt.Errorf("resolved FQDN ('%s') points to zone apex, expected challenge record below zone", resolvedFqdn)
-	}
-
-	suffix := "." + zoneName
-	if !strings.HasSuffix(fqdn, suffix) {
-		return "", fmt.Errorf("resolved FQDN ('%s') is not within zone '%s'", resolvedFqdn, zoneName)
-	}
-
-	host := strings.TrimSuffix(fqdn, suffix)
-	if host == "" {
-		return "", fmt.Errorf("unable to derive relative host from resolved FQDN ('%s')", resolvedFqdn)
-	}
-
-	return host, nil
-}
-
-func getZoneDomain(cfg *bunnyClientConfig) (string, error) {
-	urlOfZone := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
-
-	getResBody, getResErr := callDnsApi(urlOfZone, "GET", nil, cfg)
-	if getResErr != nil {
-		return "", fmt.Errorf("Failed to request zone: %v", getResErr)
-	}
-
-	zone := internal.Zone{}
-	readErr := json.Unmarshal(getResBody, &zone)
-	if readErr != nil {
-		return "", fmt.Errorf("Unable to unmarshal response: %v", readErr)
-	}
-
-	return zone.Domain, nil
-}
-
-func getRecords(cfg *bunnyClientConfig) ([]internal.Record, error) {
-	urlOfRecords := "https://api.bunny.net/dnszone/" + fmt.Sprintf("%d", cfg.zoneID)
-
-	getResBody, getResErr := callDnsApi(urlOfRecords, "GET", nil, cfg)
-	if getResErr != nil {
-		return nil, fmt.Errorf("Failed to request records: %v", getResErr)
-	}
-
-	zone := internal.Zone{}
-	readErr := json.Unmarshal(getResBody, &zone)
-	if readErr != nil {
-		return nil, fmt.Errorf("Unable to unmarshal response: %v", readErr)
-	}
-
-	return zone.Records, nil
-}
-
-func callDnsApi(url, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	sec, err := n.client.CoreV1().Secrets(secretNs).Get(ctx, cfg.SecretRef, metav1.GetOptions{})
 	if err != nil {
-		return []byte{}, fmt.Errorf("unable to execute request %v", err)
+		return nil, fmt.Errorf("unable to get secret %q/%q: %w", secretNs, cfg.SecretRef, err)
 	}
-	req.Header.Add("content-type", "application/json")
-	req.Header.Set("accept", "application/json")
-	req.Header.Set("AccessKey", cfg.apiKey)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Do(req)
+	apiKey, err := stringFromSecretData(sec.Data, key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get key %q from secret %q/%q: %w", key, secretNs, cfg.SecretRef, err)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("key %q in secret %q/%q is empty", key, secretNs, cfg.SecretRef)
 	}
 
-	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			klog.Fatal(err)
-		}
-	}()
-
-	respBody, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("unable to read response body: %v", readErr)
-	}
-
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
-		return respBody, nil
-	}
-
-	text := "Error calling API status:" + resp.Status + " url: " + url + " method: " + method
-	klog.Error(text)
-	return nil, errors.New(text)
+	return &bunnyClientConfig{
+		zoneID: cfg.ZoneID,
+		apiKey: apiKey,
+	}, nil
 }
 
-func stringFromSecretData(secretData *map[string][]byte, key string) (string, error) {
-	data, ok := (*secretData)[key]
+// stringFromSecretData extracts a string value from a Kubernetes secret data map by key.
+// It returns an error if the key is absent.
+func stringFromSecretData(secretData map[string][]byte, key string) (string, error) {
+	data, ok := secretData[key]
 	if !ok {
 		return "", fmt.Errorf("key %q not found in secret data", key)
 	}
 	return string(data), nil
 }
 
+// loadConfig unmarshals the webhook solver configuration from the JSON blob provided by cert-manager.
+// A nil configJSON returns a zero-value config.
 func loadConfig(cfgJSON *extapi.JSON) (bunnyDNSProviderConfig, error) {
 	cfg := bunnyDNSProviderConfig{}
-
 	if cfgJSON == nil {
 		return cfg, nil
 	}
 	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
-		return cfg, fmt.Errorf("error decoding solver config: %v", err)
+		return cfg, fmt.Errorf("error decoding solver config: %w", err)
 	}
 	return cfg, nil
 }

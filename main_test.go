@@ -97,22 +97,36 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 		zoneID: mustParseZoneID(t, zoneID),
 	}
 
-	domain := os.Getenv("BUNNY_TEST_FQDN")
-	if domain == "" {
+	fqdn := os.Getenv("BUNNY_TEST_FQDN")
+	if fqdn == "" {
 		t.Skip("BUNNY_TEST_FQDN not set")
 	}
 
 	txtValue := "cert-manager-webhook-test-value"
 
+	zone, err := getZone(cfg)
+	if err != nil {
+		t.Fatalf("Failed to fetch zone: %v", err)
+	}
+
+	host, err := getHostFromZone(fqdn, zone.Domain)
+	if err != nil {
+		t.Fatalf("Failed to derive host from FQDN: %v", err)
+	}
+
 	t.Run("Add TXT Record", func(t *testing.T) {
-		err := addTxtRecord(cfg, domain, txtValue)
+		err := addTxtRecord(cfg, host, txtValue)
 		if err != nil {
 			t.Fatalf("Failed to add TXT record: %v", err)
 		}
 	})
 
 	t.Run("Delete TXT Record", func(t *testing.T) {
-		err := deleteTxtRecord(cfg, domain, txtValue)
+		zone, err := getZone(cfg)
+		if err != nil {
+			t.Fatalf("Failed to re-fetch zone for cleanup: %v", err)
+		}
+		_, err = deleteTxtRecord(cfg, zone.Records, host, txtValue)
 		if err != nil {
 			t.Fatalf("Failed to delete TXT record: %v", err)
 		}
