@@ -19,3 +19,6 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/maintainers: |
     - name: aardbol
+maintainers:
+  - name: aardbol
+    url: https://github.com/aardbol
