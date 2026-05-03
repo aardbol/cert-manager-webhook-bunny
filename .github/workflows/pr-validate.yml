@@ -83,11 +83,13 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      STORAGE_DRIVER: overlay
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Prepare Rootless Storage Directory
+      - name: Prepare Container Storage Directory
         run: mkdir -p ~/.local/share/containers/storage
 
       - name: Cache Buildah storage
