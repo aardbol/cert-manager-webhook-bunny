@@ -90,9 +90,6 @@ jobs:
       - name: Prepare Container Storage Directory
         run: mkdir -p ~/.local/share/containers/storage
 
-      - name: Verify storage driver
-        run: podman info --format '{{.Store.GraphDriverName}}'
-
       - name: Cache Buildah storage
         uses: actions/cache@v5
         with:
@@ -100,6 +97,12 @@ jobs:
           key: buildah-${{ runner.os }}-${{ hashFiles('**/Containerfile', '**/go.sum') }}
           restore-keys: |
             buildah-${{ runner.os }}-
+
+      - name: Verify cache state
+        run: |
+          echo "Storage contents:"
+          du -sh ~/.local/share/containers/storage/ 2>/dev/null || echo "Storage directory is empty or missing"
+          podman images 2>/dev/null || echo "No images found"
 
       - name: Build image with Buildah
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
