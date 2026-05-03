@@ -4,14 +4,32 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  validate:
-    runs-on: ubuntu-24.04
+env:
+  DEFAULT_RUNNER: ubuntu-24.04
+  GOLANGCI_LINT_VERSION: v2.11
 
+jobs:
+  lint:
+    runs-on: ${{ env.DEFAULT_RUNNER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: --timeout=5m
+
+  test:
+    runs-on: ${{ env.DEFAULT_RUNNER }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -25,13 +43,71 @@ jobs:
           BUNNY_TEST_FQDN: ${{ secrets.BUNNY_TEST_FQDN }}
         run: make test
 
-      - name: Verify Containerfile build
+  security-scan:
+    runs-on: ${{ env.DEFAULT_RUNNER }}
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          format: sarif
+          output: trivy-fs-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy FS results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        if: always()
+        with:
+          sarif_file: trivy-fs-results.sarif
+          category: trivy-fs
+
+  container:
+    runs-on: ${{ env.DEFAULT_RUNNER }}
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build image with Buildah
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
+        id: build-image
         with:
           containerfiles: ./Containerfile
           image: cert-manager-webhook-bunny-test
           tags: latest
           platforms: linux/amd64
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: localhost/cert-manager-webhook-bunny-test:latest
+          format: sarif
+          output: trivy-image-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy image results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        if: always()
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy-image
+
+  helm:
+    runs-on: ${{ env.DEFAULT_RUNNER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
