@@ -12,6 +12,7 @@ permissions:
 env:
   GOLANGCI_LINT_VERSION: v2.11
   GO_VERSION: 1.25
+  REGISTRY: ghcr.io
 
 jobs:
   lint:
@@ -88,12 +89,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Log in to GHCR for Container Push
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
       - name: Prepare cache args
         id: cache-args
         run: |
           echo "cache-from=--cache-from=ghcr.io/${{ github.repository }}/build-cache" >> $GITHUB_OUTPUT
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "cache-to=--cache-to=ghcr.io/${{ github.repository }}/build-cache,mode=max" >> $GITHUB_OUTPUT
+            echo "cache-to=--cache-to=ghcr.io/${{ github.repository }}/build-cache" >> $GITHUB_OUTPUT
           fi
 
       - name: Build image with Buildah
