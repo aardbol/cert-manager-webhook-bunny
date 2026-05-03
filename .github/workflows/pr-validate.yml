@@ -87,23 +87,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Prepare Container Storage Directory
-        run: mkdir -p ~/.local/share/containers/storage
-
-      - name: Cache Buildah storage
-        uses: actions/cache@v5
-        with:
-          path: ~/.local/share/containers/storage
-          key: buildah-${{ runner.os }}-${{ hashFiles('**/Containerfile', '**/go.sum') }}
-          restore-keys: |
-            buildah-${{ runner.os }}-
-
-      - name: Verify cache state
-        run: |
-          echo "Storage contents:"
-          du -sh ~/.local/share/containers/storage/ 2>/dev/null || echo "Storage directory is empty or missing"
-          podman images 2>/dev/null || echo "No images found"
-
       - name: Build image with Buildah
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
         id: build-image
@@ -112,7 +95,6 @@ jobs:
           image: cert-manager-webhook-bunny-test
           tags: latest
           platforms: linux/amd64
-          layers: true
 
       - name: Export image to tar archive
         run: podman save -o image.tar cert-manager-webhook-bunny-test:latest
