@@ -81,7 +81,7 @@ jobs:
         id: build-image
         with:
           containerfiles: ./Containerfile
-          image: cert-manager-webhook-bunny-test
+          image: localhost/cert-manager-webhook-bunny-test
           tags: latest
           platforms: linux/amd64
 
