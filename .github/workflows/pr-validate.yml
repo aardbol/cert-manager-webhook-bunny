@@ -10,12 +10,11 @@ permissions:
   contents: read
 
 env:
-  DEFAULT_RUNNER: ubuntu-24.04
   GOLANGCI_LINT_VERSION: v2.11
 
 jobs:
   lint:
-    runs-on: ${{ env.DEFAULT_RUNNER }}
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -29,7 +28,7 @@ jobs:
           args: --timeout=5m
 
   test:
-    runs-on: ${{ env.DEFAULT_RUNNER }}
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -44,7 +43,7 @@ jobs:
         run: make test
 
   security-scan:
-    runs-on: ${{ env.DEFAULT_RUNNER }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -69,7 +68,7 @@ jobs:
           category: trivy-fs
 
   container:
-    runs-on: ${{ env.DEFAULT_RUNNER }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -102,7 +101,7 @@ jobs:
           category: trivy-image
 
   helm:
-    runs-on: ${{ env.DEFAULT_RUNNER }}
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
