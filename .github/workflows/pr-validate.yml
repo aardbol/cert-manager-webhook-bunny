@@ -83,14 +83,15 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    env:
-      STORAGE_DRIVER: overlay
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Prepare Container Storage Directory
         run: mkdir -p ~/.local/share/containers/storage
+
+      - name: Verify storage driver
+        run: podman info --format '{{.Store.GraphDriverName}}'
 
       - name: Cache Buildah storage
         uses: actions/cache@v5
