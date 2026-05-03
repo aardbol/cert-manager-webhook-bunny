@@ -33,14 +33,13 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
+          only-new-issues: true
 
   test:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -82,28 +81,22 @@ jobs:
   container:
     runs-on: ubuntu-24.04
     permissions:
-      packages: write
       contents: read
       security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Log in to GHCR for Container Push
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+      - name: Prepare Rootless Storage Directory
+        run: mkdir -p ~/.local/share/containers/storage
+
+      - name: Cache Buildah storage
+        uses: actions/cache@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-
-      - name: Prepare cache args
-        id: cache-args
-        run: |
-          echo "cache-from=--cache-from=ghcr.io/${{ github.repository }}/build-cache" >> $GITHUB_OUTPUT
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "cache-to=--cache-to=ghcr.io/${{ github.repository }}/build-cache" >> $GITHUB_OUTPUT
-          fi
+          path: ~/.local/share/containers/storage
+          key: buildah-${{ runner.os }}-${{ hashFiles('**/Containerfile', '**/go.sum') }}
+          restore-keys: |
+            buildah-${{ runner.os }}-
 
       - name: Build image with Buildah
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
@@ -114,9 +107,6 @@ jobs:
           tags: latest
           platforms: linux/amd64
           layers: true
-          extra-args: |
-            ${{ steps.cache-args.outputs.cache-from }}
-            ${{ steps.cache-args.outputs.cache-to }}
 
       - name: Export image to tar archive
         run: podman save -o image.tar cert-manager-webhook-bunny-test:latest
