@@ -38,71 +38,56 @@ type bunnyDNSProviderSolver struct {
 type bunnyDNSProviderConfig struct {
 	// SecretRef is the name of the secret which contains Bunny credentials
 	SecretRef string `json:"secretRef"`
-	// SecretNamespace contains an optional namespace for the secret
+	// SecretNamespace contains a namespace for the secret - optional
 	SecretNamespace string `json:"secretNamespace"`
-	// SecretKey contains an optional name of the secret, defaults to "api-key"
+	// SecretKey contains a name of the secret, defaults to "api-key" - optional
 	SecretKey string `json:"secretKey"`
-	// ZoneID contains the Bunny DNS zone ID
-	ZoneID int `json:"zoneId"`
 }
 
+// Name returns a unique name for this DNS provider solver, which is used by cert-manager to identify it.
 func (n *bunnyDNSProviderSolver) Name() string {
 	return "bunny"
 }
 
 // Present creates the ACME DNS-01 TXT record if it does not already exist.
-// It is idempotent: if a matching TXT record is found in the zone, it returns
-// immediately without issuing another Bunny API write.
 func (n *bunnyDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
-	cfg, err := n.getConfig(ch)
+	bunnyClient, err := n.getClient(ch)
 	if err != nil {
 		return err
 	}
 
-	zone, err := getZone(cfg)
-	if err != nil {
-		return err
-	}
-
-	host, err := getHostFromZone(ch.ResolvedFQDN, zone.Domain)
+	zone, host, err := bunnyClient.resolveZone(ch.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
 	for _, r := range zone.Records {
-		if r.Type == 3 && r.Name == host && r.Value == ch.Key {
+		if r.Type == RecordTypeTXT && r.Name == host && r.Value == ch.Key {
 			klog.Infof("TXT record already exists for domain '%s', skipping creation", ch.DNSName)
 			return nil
 		}
 	}
 
-	if err := addTxtRecord(cfg, host, ch.Key); err != nil {
+	if err := bunnyClient.addTxtRecord(zone.Id, host, ch.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", ch.DNSName)
 	return nil
 }
 
-// CleanUp removes every Bunny TXT record that matches the challenge key,
-// relative host name, and record type. If no matching record exists, it
-// logs and returns successfully so that retries or stale cleanups do not fail.
+// CleanUp removes every Bunny TXT record that matches the challenge key.
 func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	cfg, err := n.getConfig(ch)
+	bunnyClient, err := n.getClient(ch)
 	if err != nil {
 		return err
 	}
 
-	zone, err := getZone(cfg)
+	zone, host, err := bunnyClient.resolveZone(ch.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
-	host, err := getHostFromZone(ch.ResolvedFQDN, zone.Domain)
-	if err != nil {
-		return err
-	}
-
-	deleted, err := deleteTxtRecord(cfg, zone.Records, host, ch.Key)
+	deleted, err := bunnyClient.deleteTxtRecord(zone.Id, zone.Records, host, ch.Key)
 	if err != nil {
 		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
 	}
@@ -114,6 +99,7 @@ func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 	return nil
 }
 
+// Initialize builds the Kubernetes clientset from the provided kubeconfig and stores it for later use.
 func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-chan struct{}) error {
 	cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
@@ -123,17 +109,11 @@ func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-c
 	return nil
 }
 
-// getConfig builds the runtime Bunny client configuration from the challenge request.
-// It validates that zoneId and secretRef are present, resolves the secret namespace,
-// and extracts the API key from the referenced Kubernetes secret.
-func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunnyClientConfig, error) {
+// getClient builds the runtime Bunny API client from the challenge request.
+func (n *bunnyDNSProviderSolver) getClient(ch *v1alpha1.ChallengeRequest) (*bunnyClient, error) {
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return nil, err
-	}
-
-	if cfg.ZoneID <= 0 {
-		return nil, fmt.Errorf("zoneId must be specified and greater than 0")
 	}
 
 	if cfg.SecretRef == "" {
@@ -163,11 +143,7 @@ func (n *bunnyDNSProviderSolver) getConfig(ch *v1alpha1.ChallengeRequest) (*bunn
 	if apiKey == "" {
 		return nil, fmt.Errorf("key %q in secret %q/%q is empty", key, secretNs, cfg.SecretRef)
 	}
-
-	return &bunnyClientConfig{
-		zoneID: cfg.ZoneID,
-		apiKey: apiKey,
-	}, nil
+	return newBunnyClient(apiKey), nil
 }
 
 // stringFromSecretData extracts a string value from a Kubernetes secret data map by key.

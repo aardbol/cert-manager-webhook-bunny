@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestGetHostFromZone(t *testing.T) {
@@ -60,6 +61,7 @@ func TestGetHostFromZone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			host, err := getHostFromZone(tt.resolvedFQDN, tt.zoneName)
 			if tt.expectErr {
 				if err == nil {
@@ -77,6 +79,8 @@ func TestGetHostFromZone(t *testing.T) {
 	}
 }
 
+// TestTXTRecordManagementIntegration tests the full Present/CleanUp flow against Bunny DNS.
+// Run with BUNNY_API_KEY and BUNNY_TEST_FQDN environment variables set.
 func TestTXTRecordManagementIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -87,59 +91,66 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 		t.Skip("BUNNY_API_KEY not set")
 	}
 
-	zoneID := os.Getenv("BUNNY_ZONE_ID")
-	if zoneID == "" {
-		t.Skip("BUNNY_ZONE_ID not set")
-	}
-
-	cfg := &bunnyClientConfig{
-		apiKey: apiKey,
-		zoneID: mustParseZoneID(t, zoneID),
-	}
-
 	fqdn := os.Getenv("BUNNY_TEST_FQDN")
 	if fqdn == "" {
 		t.Skip("BUNNY_TEST_FQDN not set")
 	}
 
-	txtValue := "cert-manager-webhook-test-value"
+	client := newBunnyClient(apiKey)
 
-	zone, err := getZone(cfg)
-	if err != nil {
-		t.Fatalf("Failed to fetch zone: %v", err)
-	}
+	txtValue := "cert-manager-webhook-test-value-" + fmt.Sprintf("%d", time.Now().UnixNano())
 
-	host, err := getHostFromZone(fqdn, zone.Domain)
-	if err != nil {
-		t.Fatalf("Failed to derive host from FQDN: %v", err)
-	}
-
-	t.Run("Add TXT Record", func(t *testing.T) {
-		err := addTxtRecord(cfg, host, txtValue)
+	// Test Present flow: resolve zone, check for duplicate, add record.
+	t.Run("Present", func(t *testing.T) {
+		zone, host, err := client.resolveZone(fqdn)
 		if err != nil {
-			t.Fatalf("Failed to add TXT record: %v", err)
+			t.Fatalf("failed to resolve zone for %q: %v", fqdn, err)
+		}
+
+		// Check for existing record (should not exist).
+		for _, r := range zone.Records {
+			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
+				t.Fatalf("TXT record unexpectedly already exists for %q", host)
+			}
+		}
+
+		// Add the record.
+		if err := client.addTxtRecord(zone.Id, host, txtValue); err != nil {
+			t.Fatalf("failed to add TXT record: %v", err)
+		}
+
+		// Verify it was added by re-fetching the zone.
+		zone, host, err = client.resolveZone(fqdn)
+		if err != nil {
+			t.Fatalf("failed to re-resolve zone after add: %v", err)
+		}
+		found := false
+		for _, r := range zone.Records {
+			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("TXT record was not found after add for %q", host)
 		}
 	})
 
-	t.Run("Delete TXT Record", func(t *testing.T) {
-		zone, err := getZone(cfg)
+	// Test CleanUp flow: resolve zone, delete matching records.
+	t.Run("CleanUp", func(t *testing.T) {
+		zone, host, err := client.resolveZone(fqdn)
 		if err != nil {
-			t.Fatalf("Failed to re-fetch zone for cleanup: %v", err)
+			t.Fatalf("failed to resolve zone for cleanup: %v", err)
 		}
-		_, err = deleteTxtRecord(cfg, zone.Records, host, txtValue)
+
+		deleted, err := client.deleteTxtRecord(zone.Id, zone.Records, host, txtValue)
 		if err != nil {
-			t.Fatalf("Failed to delete TXT record: %v", err)
+			t.Fatalf("failed to delete TXT record: %v", err)
+		}
+		if deleted == 0 {
+			t.Logf("no matching TXT record found for cleanup (this is OK)")
+		} else {
+			t.Logf("deleted %d TXT record(s)", deleted)
 		}
 	})
-}
-
-func mustParseZoneID(t *testing.T, value string) int {
-	t.Helper()
-
-	var zoneID int
-	_, err := fmt.Sscanf(value, "%d", &zoneID)
-	if err != nil {
-		t.Fatalf("invalid BUNNY_ZONE_ID %q: %v", value, err)
-	}
-	return zoneID
 }

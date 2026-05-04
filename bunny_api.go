@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -16,27 +17,41 @@ import (
 )
 
 const (
-	ApiUrl          = "https://api.bunny.net/dnszone/"
-	RecordsEndpoint = "/records"
+	DnsApiUrl       = "https://api.bunny.net/dnszone"
+	RecordsEndpoint = "records"
 	RecordTypeTXT   = 3
 )
 
-// bunnyClientConfig contains the parameters required to interact with Bunny API, should be located in a Secret
-type bunnyClientConfig struct {
-	apiKey string
-	zoneID int
+// bunnyClient encapsulates the HTTP client and configuration for API requests
+type bunnyClient struct {
+	apiKey     string
+	httpClient *http.Client
 }
 
-// addTxtRecord creates a TXT record in the Bunny zone. The host argument
-// must already be the relative name within the zone.
-func addTxtRecord(cfg *bunnyClientConfig, host string, key string) error {
+// newBunnyClient initializes a new bunnyClient, reusing the underlying http.Client
+func newBunnyClient(apiKey string) *bunnyClient {
+	return &bunnyClient{
+		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+// addTxtRecord creates a TXT record in the Bunny zone.
+func (c *bunnyClient) addTxtRecord(zoneID int, host string, key string) error {
 	payload := internal.CreateRecordRequest{Type: RecordTypeTXT, Ttl: 120, Value: key, Name: host}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record payload: %w", err)
 	}
 
-	_, err = callDnsApi(RecordsEndpoint, "PUT", bytes.NewReader(data), cfg)
+	reqUrl, err := url.JoinPath(DnsApiUrl, fmt.Sprint(zoneID), RecordsEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to build URL: %w", err)
+	}
+
+	_, err = c.doRequest(reqUrl, "PUT", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create record: %w", err)
 	}
@@ -44,15 +59,20 @@ func addTxtRecord(cfg *bunnyClientConfig, host string, key string) error {
 }
 
 // deleteTxtRecord removes all matching TXT records from the provided slice.
-// It returns the number of records successfully deleted. If one or more deletions fail, it still attempts the rest and returns an aggregate error.
-func deleteTxtRecord(cfg *bunnyClientConfig, records []internal.Record, host string, key string) (int, error) {
+func (c *bunnyClient) deleteTxtRecord(zoneID int, records []internal.Record, host string, key string) (int, error) {
 	deleted := 0
 	var failed []int
 
 	for _, record := range records {
-		if record.Value == key && record.Type == 3 && record.Name == host {
-			suffix := RecordsEndpoint + "/" + fmt.Sprintf("%d", record.Id)
-			if _, err := callDnsApi(suffix, "DELETE", nil, cfg); err != nil {
+		if record.Value == key && record.Type == RecordTypeTXT && record.Name == host {
+			reqUrl, err := url.JoinPath(DnsApiUrl, fmt.Sprint(zoneID), RecordsEndpoint, fmt.Sprint(record.Id))
+			if err != nil {
+				klog.Warningf("failed to build URL for record %d: %v", record.Id, err)
+				failed = append(failed, record.Id)
+				continue
+			}
+
+			if _, err := c.doRequest(reqUrl, "DELETE", nil); err != nil {
 				klog.Warningf("failed to delete record %d: %v", record.Id, err)
 				failed = append(failed, record.Id)
 				continue
@@ -67,10 +87,7 @@ func deleteTxtRecord(cfg *bunnyClientConfig, records []internal.Record, host str
 	return deleted, nil
 }
 
-// getHostFromZone derives the relative DNS host name from a fully-qualified
-// domain name and a zone domain. It normalizes both inputs, validates that
-// the FQDN is a descendant of the zone (not the apex), and returns the host
-// portion without the zone suffix.
+// getHostFromZone derives the relative DNS host name from a fully-qualified domain name.
 func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
 	if fqdn == "" {
@@ -99,45 +116,64 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	return host, nil
 }
 
-// getZone fetches the full Bunny DNS zone object for the configured zoneID.
-// The returned Zone contains both the authoritative Domain name and the
-// current list of Records, allowing callers to derive the relative host and
-// check for existing TXT records with a single API call.
-func getZone(cfg *bunnyClientConfig) (*internal.Zone, error) {
-	body, err := callDnsApi("", "GET", nil, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to request zone: %w", err)
+// resolveZone dynamically traverses the domain tree, requests the correct zone from the API,
+// and derives the relative host name for the TXT record.
+func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
+	challengeDomain := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(fqdn)), ".")
+	challengeDomain = strings.TrimPrefix(challengeDomain, "_acme-challenge.")
+
+	parts := strings.Split(challengeDomain, ".")
+	if len(parts) < 2 {
+		return nil, "", fmt.Errorf("FQDN '%s' is too short to determine a zone", fqdn)
 	}
-	zone := &internal.Zone{}
-	if err := json.Unmarshal(body, zone); err != nil {
-		return nil, fmt.Errorf("unable to unmarshal zone response: %w", err)
+	// Iterate from shortest valid parent zone to most specific subdomain zone.
+	for i := len(parts) - 2; i >= 0; i-- {
+		searchDomain := strings.Join(parts[i:], ".")
+
+		reqUrl := fmt.Sprintf("%s?search=%s", DnsApiUrl, url.QueryEscape(searchDomain))
+		body, err := c.doRequest(reqUrl, "GET", nil)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to search for zone '%s': %w", searchDomain, err)
+		}
+
+		var list internal.ZoneList
+		if err := json.Unmarshal(body, &list); err != nil {
+			return nil, "", fmt.Errorf("unable to unmarshal zone search response: %w", err)
+		}
+
+		for _, z := range list.Items {
+			if strings.ToLower(z.Domain) == searchDomain {
+				// Zone found, now calculate the relative host
+				host, err := getHostFromZone(fqdn, z.Domain)
+				if err != nil {
+					return nil, "", fmt.Errorf("failed to derive host: %w", err)
+				}
+				return &z, host, nil
+			}
+		}
 	}
-	return zone, nil
+	return nil, "", fmt.Errorf("could not dynamically find a matching zone for FQDN '%s'", fqdn)
 }
 
-// callDnsApi executes a Bunny DNS API request.
-func callDnsApi(urlSuffix, method string, body io.Reader, cfg *bunnyClientConfig) ([]byte, error) {
+// doRequest executes a generic Bunny DNS HTTP API request using the configured client.
+func (c *bunnyClient) doRequest(reqUrl, method string, body io.Reader) ([]byte, error) {
 	ctx := context.Background()
-	url := ApiUrl + fmt.Sprintf("%d", cfg.zoneID) + urlSuffix
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, reqUrl, body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build request: %w", err)
 	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("accept", "application/json")
-	req.Header.Set("AccessKey", cfg.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("AccessKey", c.apiKey)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
-			klog.Warningf("failed to close response body for %s %s: %v", method, urlSuffix, cerr)
+			klog.Warningf("failed to close response body for %s %s: %v", method, reqUrl, cerr)
 		}
 	}()
 
@@ -151,5 +187,5 @@ func callDnsApi(urlSuffix, method string, body io.Reader, cfg *bunnyClientConfig
 	}
 
 	return nil, fmt.Errorf("API error: status=%s, url=%s, method=%s, body=%s",
-		resp.Status, urlSuffix, method, string(respBody))
+		resp.Status, reqUrl, method, string(respBody))
 }

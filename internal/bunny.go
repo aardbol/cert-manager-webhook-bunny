@@ -1,6 +1,12 @@
 package internal
 
+// ZoneList represents the paginated search response from the Bunny DNS API.
+type ZoneList struct {
+	Items []Zone `json:"Items"`
+}
+
 type Zone struct {
+	Id      int      `json:"Id"`
 	Domain  string   `json:"Domain"`
 	Records []Record `json:"Records"`
 }

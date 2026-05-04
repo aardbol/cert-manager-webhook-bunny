@@ -9,6 +9,8 @@ cert-manager-webhook-bunny
 This fork takes a much simpler approach to the verification process to ensure compatibility with future DNS format changes at Bunny, by setting the Zone ID manually. 
 But it comes with the downside that only one zone can be verified per Certificate solver configuration.
 
+The container images are signed since v1.1.1, and the signatures can be verified using `cosign`.
+
 Usage
 -----
 
@@ -43,7 +45,6 @@ spec:
           config:
             secretRef: bunny-api
             secretNamespace: cert-manager
-            zoneId: 123456
 ```
 For more details, please refer to [https://cert-manager.io/docs/configuration/acme/dns01/webhook/](https://cert-manager.io/docs/configuration/acme/dns01/webhook/)
 
@@ -60,7 +61,7 @@ Disclaimer
 
 I am in no way affiliated or associated with Bunny.
 
-(c) David Hidvegi and contributors.
+(c) David Hidvegi, Leonardo a.k.a. aardbol, and contributors.
 
 License
 -------
