@@ -20,6 +20,10 @@ env:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -104,6 +108,17 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
           registry: ${{ env.REGISTRY }}
+
+      - name: Setup Cosign
+        if: steps.check.outputs.skip_release == 'false' && steps.check.outputs.image_exists == 'false'
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign the container image
+        if: steps.check.outputs.skip_release == 'false' && steps.check.outputs.image_exists == 'false'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.check.outputs.app_version }}"
+          DIGEST=$(oras resolve "$IMAGE")
+          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${DIGEST}"
 
       # --- HELM CHART PACKAGE & PUSH (Always runs if chart version is bumped) ---
 
