@@ -45,7 +45,6 @@ spec:
           config:
             secretRef: bunny-api
             secretNamespace: cert-manager
-            zoneId: 123456
 ```
 For more details, please refer to [https://cert-manager.io/docs/configuration/acme/dns01/webhook/](https://cert-manager.io/docs/configuration/acme/dns01/webhook/)
 
@@ -62,7 +61,7 @@ Disclaimer
 
 I am in no way affiliated or associated with Bunny.
 
-(c) David Hidvegi and contributors.
+(c) David Hidvegi, Leonardo a.k.a. aardbol, and contributors.
 
 License
 -------
