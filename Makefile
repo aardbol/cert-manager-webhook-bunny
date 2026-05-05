@@ -1,6 +1,7 @@
 IMAGE_NAME := cert-manager-webhook-bunny
 IMAGE_TAG  := local
 
+GO_VERSION ?= 1.25
 CGO_ENABLED ?= 0
 GOOS ?= linux
 GOARCH ?= amd64
@@ -29,7 +30,10 @@ clean:
 	$(RM) webhook
 
 container-build:
-	buildah build -t $(IMAGE_NAME):$(IMAGE_TAG) -f Containerfile .
+	buildah build \
+		--build-arg GO_VERSION=$(GO_VERSION) \
+		-t $(IMAGE_NAME):$(IMAGE_TAG) \
+		-f Containerfile .
 
 container-run:
 	podman run --rm -it --read-only --security-opt=no-new-privileges $(IMAGE_NAME):$(IMAGE_TAG)

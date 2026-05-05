@@ -15,7 +15,7 @@ permissions:
 
 env:
   GOLANGCI_LINT_VERSION: v2.11
-  GO_VERSION: 1.25
+  GO_VERSION: ${{ vars.GO_VERSION }}
   REGISTRY: ghcr.io
 
 jobs:

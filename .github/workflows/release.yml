@@ -88,6 +88,8 @@ jobs:
             ${{ steps.check.outputs.is_prerelease == 'false' && 'latest' || '' }}
           containerfiles: ./Containerfile
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            GO_VERSION=${{ vars.GO_VERSION }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ env.IMAGE_NAME }}
             org.opencontainers.image.version=${{ steps.check.outputs.app_version }}
