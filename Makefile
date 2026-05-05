@@ -1,14 +1,17 @@
-# Variables
 IMAGE_NAME := cert-manager-webhook-bunny
 IMAGE_TAG  := local
+
+CGO_ENABLED ?= 0
+GOOS ?= linux
+GOARCH ?= amd64
+LDFLAGS ?= -w -extldflags "-static"
 
 .PHONY: all build clean test vet tidy fmt container-build container-run
 
 all: clean tidy fmt vet test build
 
 build:
-	CGO_ENABLED=0 go build -o webhook -ldflags '-w -extldflags "-static"' .
-
+	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o webhook -ldflags '$(LDFLAGS)' .
 test:
 	go test -v ./...
 
