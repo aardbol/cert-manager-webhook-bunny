@@ -6,8 +6,7 @@ cert-manager-webhook-bunny
 
 [cert-manager](https://cert-manager.io) webhook implementation for use with [Bunny](https://bunny.net) provider for solving [ACME DNS-01 challenges](https://cert-manager.io/docs/configuration/acme/dns01/).
 
-This fork takes a much simpler approach to the verification process to ensure compatibility with future DNS format changes at Bunny, by setting the Zone ID manually. 
-But it comes with the downside that only one zone can be verified per Certificate solver configuration.
+This fork takes a much simpler approach to the verification process to ensure compatibility with future DNS format changes at Bunny.
 
 The container images are signed since v1.1.1, and the signatures can be verified using `cosign`.
 
