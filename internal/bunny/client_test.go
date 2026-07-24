@@ -1,12 +1,10 @@
-package main
+package bunny
 
 import (
 	"fmt"
 	"os"
 	"testing"
 	"time"
-
-	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 )
 
 func TestGetHostFromZone(t *testing.T) {
@@ -96,33 +94,33 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 		t.Skip("BUNNY_TEST_FQDN not set")
 	}
 
-	client := newBunnyClient(apiKey)
+	client := NewClient(apiKey)
 
 	txtValue := "cert-manager-webhook-test-value-" + fmt.Sprintf("%d", time.Now().UnixNano())
 
 	t.Run("Present", func(t *testing.T) {
-		zone, host, err := client.resolveZone(fqdn)
+		zone, host, err := client.ResolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to resolve zone for %q: %v", fqdn, err)
 		}
 
 		for _, r := range zone.Records {
-			if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == txtValue {
+			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
 				t.Fatalf("TXT record unexpectedly already exists for %q", host)
 			}
 		}
 
-		if err := client.addTxtRecord(zone.ID, host, txtValue); err != nil {
+		if err := client.AddTXTRecord(zone.ID, host, txtValue); err != nil {
 			t.Fatalf("failed to add TXT record: %v", err)
 		}
 
-		zone, host, err = client.resolveZone(fqdn)
+		zone, host, err = client.ResolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to re-resolve zone after add: %v", err)
 		}
 		found := false
 		for _, r := range zone.Records {
-			if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == txtValue {
+			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
 				found = true
 				break
 			}
@@ -133,12 +131,12 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 	})
 
 	t.Run("CleanUp", func(t *testing.T) {
-		zone, host, err := client.resolveZone(fqdn)
+		zone, host, err := client.ResolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to resolve zone for cleanup: %v", err)
 		}
 
-		deleted, err := client.deleteTxtRecord(zone.ID, zone.Records, host, txtValue)
+		deleted, err := client.DeleteTXTRecord(zone.ID, zone.Records, host, txtValue)
 		if err != nil {
 			t.Fatalf("failed to delete TXT record: %v", err)
 		}

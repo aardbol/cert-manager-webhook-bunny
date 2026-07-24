@@ -16,7 +16,7 @@ import (
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 
-	"github.com/aardbol/cert-manager-webhook-bunny/internal"
+	"github.com/aardbol/cert-manager-webhook-bunny/internal/bunny"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -51,19 +51,19 @@ func (n *bunnyDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	zone, host, err := bunnyClient.resolveZone(cr.ResolvedFQDN)
+	zone, host, err := bunnyClient.ResolveZone(cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
 	for _, r := range zone.Records {
-		if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == cr.Key {
+		if r.Type == bunny.RecordTypeTXT && r.Name == host && r.Value == cr.Key {
 			klog.Infof("TXT record already exists for domain '%s', skipping creation", cr.DNSName)
 			return nil
 		}
 	}
 
-	if err := bunnyClient.addTxtRecord(zone.ID, host, cr.Key); err != nil {
+	if err := bunnyClient.AddTXTRecord(zone.ID, host, cr.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", cr.DNSName)
@@ -76,12 +76,12 @@ func (n *bunnyDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	zone, host, err := bunnyClient.resolveZone(cr.ResolvedFQDN)
+	zone, host, err := bunnyClient.ResolveZone(cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
-	deleted, err := bunnyClient.deleteTxtRecord(zone.ID, zone.Records, host, cr.Key)
+	deleted, err := bunnyClient.DeleteTXTRecord(zone.ID, zone.Records, host, cr.Key)
 	if err != nil {
 		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
 	}
@@ -102,7 +102,7 @@ func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-c
 	return nil
 }
 
-func (n *bunnyDNSProviderSolver) getClient(cr *v1alpha1.ChallengeRequest) (*bunnyClient, error) {
+func (n *bunnyDNSProviderSolver) getClient(cr *v1alpha1.ChallengeRequest) (*bunny.Client, error) {
 	cfg, err := loadConfig(cr.Config)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (n *bunnyDNSProviderSolver) getClient(cr *v1alpha1.ChallengeRequest) (*bunn
 	if apiKey == "" {
 		return nil, fmt.Errorf("key %q in secret %q/%q is empty", key, secretNs, cfg.SecretRef)
 	}
-	return newBunnyClient(apiKey), nil
+	return bunny.NewClient(apiKey), nil
 }
 
 func stringFromSecretData(secretData map[string][]byte, key string) (string, error) {

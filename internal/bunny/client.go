@@ -1,4 +1,4 @@
-package main
+package bunny
 
 import (
 	"bytes"
@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"k8s.io/klog/v2"
-
-	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 )
 
 const (
@@ -21,13 +19,13 @@ const (
 	recordsEndpoint = "records"
 )
 
-type bunnyClient struct {
+type Client struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-func newBunnyClient(apiKey string) *bunnyClient {
-	return &bunnyClient{
+func NewClient(apiKey string) *Client {
+	return &Client{
 		apiKey: apiKey,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -35,8 +33,8 @@ func newBunnyClient(apiKey string) *bunnyClient {
 	}
 }
 
-func (c *bunnyClient) addTxtRecord(zoneID int, host string, key string) error {
-	payload := internal.CreateRecordRequest{Type: internal.RecordTypeTXT, TTL: 120, Value: key, Name: host}
+func (c *Client) AddTXTRecord(zoneID int, host string, key string) error {
+	payload := CreateRecordRequest{Type: RecordTypeTXT, TTL: 120, Value: key, Name: host}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record payload: %w", err)
@@ -54,12 +52,12 @@ func (c *bunnyClient) addTxtRecord(zoneID int, host string, key string) error {
 	return nil
 }
 
-func (c *bunnyClient) deleteTxtRecord(zoneID int, records []internal.Record, host string, key string) (int, error) {
+func (c *Client) DeleteTXTRecord(zoneID int, records []Record, host string, key string) (int, error) {
 	deleted := 0
 	var failed []int
 
 	for _, record := range records {
-		if record.Value == key && record.Type == internal.RecordTypeTXT && record.Name == host {
+		if record.Value == key && record.Type == RecordTypeTXT && record.Name == host {
 			reqURL, err := url.JoinPath(dnsAPIURL, fmt.Sprint(zoneID), recordsEndpoint, fmt.Sprint(record.ID))
 			if err != nil {
 				klog.Warningf("failed to build URL for record %d: %v", record.ID, err)
@@ -110,7 +108,7 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	return host, nil
 }
 
-func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
+func (c *Client) ResolveZone(fqdn string) (*Zone, string, error) {
 	challengeDomain := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(fqdn)), ".")
 	challengeDomain = strings.TrimPrefix(challengeDomain, "_acme-challenge.")
 
@@ -128,7 +126,7 @@ func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 			return nil, "", fmt.Errorf("failed to search for zone '%s': %w", searchDomain, err)
 		}
 
-		var list internal.ZoneList
+		var list ZoneList
 		if err := json.Unmarshal(body, &list); err != nil {
 			return nil, "", fmt.Errorf("unable to unmarshal zone search response: %w", err)
 		}
@@ -146,7 +144,7 @@ func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 	return nil, "", fmt.Errorf("could not dynamically find a matching zone for FQDN '%s'", fqdn)
 }
 
-func (c *bunnyClient) doRequest(reqURL, method string, body io.Reader) ([]byte, error) {
+func (c *Client) doRequest(reqURL, method string, body io.Reader) ([]byte, error) {
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
