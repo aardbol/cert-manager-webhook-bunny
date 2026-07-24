@@ -1,16 +1,29 @@
 version: 2
 updates:
   - package-ecosystem: "gomod"
+    commit-message:
+      prefix: chore(deps)
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+      cert-manager:
+        patterns:
+          - "github.com/cert-manager/*"
 
   - package-ecosystem: "github-actions"
+    commit-message:
+      prefix: chore(actions)
     directory: "/"
     schedule:
       interval: "weekly"
 
   - package-ecosystem: "docker"
+    commit-message:
+      prefix: chore(docker)
     directory: "/"
     schedule:
       interval: "weekly"
