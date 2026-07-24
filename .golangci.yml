@@ -1,0 +1,61 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - goconst
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - whitespace
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - goconst
+          - funlen
+          - noctx
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gocritic:
+      disabled-checks:
+        - commentFormatting
+        - hugeParam
+        - rangeValCopy
+        - rangeExprCopy
+      enabled-tags:
+        - performance
+    revive:
+      rules:
+        - name: var-naming
+          arguments:
+            - []
+            - ["ACME", "API", "DNS", "FQDN", "TXT", "TTL"]
+    staticcheck:
+      checks:
+        - "-QF1008"
+
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    gofumpt:
+      extra-rules: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: true
