@@ -15,6 +15,8 @@ import (
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
+
+	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -33,73 +35,64 @@ type bunnyDNSProviderSolver struct {
 	client *kubernetes.Clientset
 }
 
-// bunnyDNSProviderConfig is the user-facing configuration for this webhook solver,
-// typically provided in the cert-manager Issuer or ClusterIssuer resource.
 type bunnyDNSProviderConfig struct {
-	// SecretRef is the name of the secret which contains Bunny credentials
-	SecretRef string `json:"secretRef"`
-	// SecretNamespace contains a namespace for the secret - optional
+	SecretRef       string `json:"secretRef"`
 	SecretNamespace string `json:"secretNamespace"`
-	// SecretKey contains a name of the secret, defaults to "api-key" - optional
-	SecretKey string `json:"secretKey"`
+	SecretKey       string `json:"secretKey"`
 }
 
-// Name returns a unique name for this DNS provider solver, which is used by cert-manager to identify it.
 func (n *bunnyDNSProviderSolver) Name() string {
 	return "bunny"
 }
 
-// Present creates the ACME DNS-01 TXT record if it does not already exist.
-func (n *bunnyDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
-	bunnyClient, err := n.getClient(ch)
+func (n *bunnyDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
+	bunnyClient, err := n.getClient(cr)
 	if err != nil {
 		return err
 	}
 
-	zone, host, err := bunnyClient.resolveZone(ch.ResolvedFQDN)
+	zone, host, err := bunnyClient.resolveZone(cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
 	for _, r := range zone.Records {
-		if r.Type == RecordTypeTXT && r.Name == host && r.Value == ch.Key {
-			klog.Infof("TXT record already exists for domain '%s', skipping creation", ch.DNSName)
+		if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == cr.Key {
+			klog.Infof("TXT record already exists for domain '%s', skipping creation", cr.DNSName)
 			return nil
 		}
 	}
 
-	if err := bunnyClient.addTxtRecord(zone.Id, host, ch.Key); err != nil {
+	if err := bunnyClient.addTxtRecord(zone.ID, host, cr.Key); err != nil {
 		return err
 	}
-	klog.Infof("successfully presented challenge for domain '%s'", ch.DNSName)
+	klog.Infof("successfully presented challenge for domain '%s'", cr.DNSName)
 	return nil
 }
 
-// CleanUp removes every Bunny TXT record that matches the challenge key.
-func (n *bunnyDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	bunnyClient, err := n.getClient(ch)
+func (n *bunnyDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
+	bunnyClient, err := n.getClient(cr)
 	if err != nil {
 		return err
 	}
 
-	zone, host, err := bunnyClient.resolveZone(ch.ResolvedFQDN)
+	zone, host, err := bunnyClient.resolveZone(cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
-	deleted, err := bunnyClient.deleteTxtRecord(zone.Id, zone.Records, host, ch.Key)
+	deleted, err := bunnyClient.deleteTxtRecord(zone.ID, zone.Records, host, cr.Key)
 	if err != nil {
 		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
 	}
 	if deleted > 0 {
-		klog.Infof("successfully cleaned up challenge for domain '%s' (%d record(s) removed)", ch.DNSName, deleted)
+		klog.Infof("successfully cleaned up challenge for domain '%s' (%d record(s) removed)", cr.DNSName, deleted)
 	} else {
-		klog.Infof("no matching TXT record found for domain '%s', cleanup skipped", ch.DNSName)
+		klog.Infof("no matching TXT record found for domain '%s', cleanup skipped", cr.DNSName)
 	}
 	return nil
 }
 
-// Initialize builds the Kubernetes clientset from the provided kubeconfig and stores it for later use.
 func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-chan struct{}) error {
 	cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
@@ -109,9 +102,8 @@ func (n *bunnyDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-c
 	return nil
 }
 
-// getClient builds the runtime Bunny API client from the challenge request.
-func (n *bunnyDNSProviderSolver) getClient(ch *v1alpha1.ChallengeRequest) (*bunnyClient, error) {
-	cfg, err := loadConfig(ch.Config)
+func (n *bunnyDNSProviderSolver) getClient(cr *v1alpha1.ChallengeRequest) (*bunnyClient, error) {
+	cfg, err := loadConfig(cr.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +114,7 @@ func (n *bunnyDNSProviderSolver) getClient(ch *v1alpha1.ChallengeRequest) (*bunn
 
 	secretNs := cfg.SecretNamespace
 	if secretNs == "" {
-		secretNs = ch.ResourceNamespace
+		secretNs = cr.ResourceNamespace
 	}
 
 	key := cfg.SecretKey
@@ -146,8 +138,6 @@ func (n *bunnyDNSProviderSolver) getClient(ch *v1alpha1.ChallengeRequest) (*bunn
 	return newBunnyClient(apiKey), nil
 }
 
-// stringFromSecretData extracts a string value from a Kubernetes secret data map by key.
-// It returns an error if the key is absent.
 func stringFromSecretData(secretData map[string][]byte, key string) (string, error) {
 	data, ok := secretData[key]
 	if !ok {
@@ -156,8 +146,6 @@ func stringFromSecretData(secretData map[string][]byte, key string) (string, err
 	return string(data), nil
 }
 
-// loadConfig unmarshals the webhook solver configuration from the JSON blob provided by cert-manager.
-// A nil configJSON returns a zero-value config.
 func loadConfig(cfgJSON *extapi.JSON) (bunnyDNSProviderConfig, error) {
 	cfg := bunnyDNSProviderConfig{}
 	if cfgJSON == nil {

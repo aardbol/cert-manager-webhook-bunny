@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/aardbol/cert-manager-webhook-bunny/internal"
 )
 
 func TestGetHostFromZone(t *testing.T) {
@@ -79,8 +81,6 @@ func TestGetHostFromZone(t *testing.T) {
 	}
 }
 
-// TestTXTRecordManagementIntegration tests the full Present/CleanUp flow against Bunny DNS.
-// Run with BUNNY_API_KEY and BUNNY_TEST_FQDN environment variables set.
 func TestTXTRecordManagementIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -100,33 +100,29 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 
 	txtValue := "cert-manager-webhook-test-value-" + fmt.Sprintf("%d", time.Now().UnixNano())
 
-	// Test Present flow: resolve zone, check for duplicate, add record.
 	t.Run("Present", func(t *testing.T) {
 		zone, host, err := client.resolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to resolve zone for %q: %v", fqdn, err)
 		}
 
-		// Check for existing record (should not exist).
 		for _, r := range zone.Records {
-			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
+			if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == txtValue {
 				t.Fatalf("TXT record unexpectedly already exists for %q", host)
 			}
 		}
 
-		// Add the record.
-		if err := client.addTxtRecord(zone.Id, host, txtValue); err != nil {
+		if err := client.addTxtRecord(zone.ID, host, txtValue); err != nil {
 			t.Fatalf("failed to add TXT record: %v", err)
 		}
 
-		// Verify it was added by re-fetching the zone.
 		zone, host, err = client.resolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to re-resolve zone after add: %v", err)
 		}
 		found := false
 		for _, r := range zone.Records {
-			if r.Type == RecordTypeTXT && r.Name == host && r.Value == txtValue {
+			if r.Type == internal.RecordTypeTXT && r.Name == host && r.Value == txtValue {
 				found = true
 				break
 			}
@@ -136,14 +132,13 @@ func TestTXTRecordManagementIntegration(t *testing.T) {
 		}
 	})
 
-	// Test CleanUp flow: resolve zone, delete matching records.
 	t.Run("CleanUp", func(t *testing.T) {
 		zone, host, err := client.resolveZone(fqdn)
 		if err != nil {
 			t.Fatalf("failed to resolve zone for cleanup: %v", err)
 		}
 
-		deleted, err := client.deleteTxtRecord(zone.Id, zone.Records, host, txtValue)
+		deleted, err := client.deleteTxtRecord(zone.ID, zone.Records, host, txtValue)
 		if err != nil {
 			t.Fatalf("failed to delete TXT record: %v", err)
 		}

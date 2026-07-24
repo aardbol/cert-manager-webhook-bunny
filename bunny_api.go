@@ -17,18 +17,15 @@ import (
 )
 
 const (
-	DnsApiUrl       = "https://api.bunny.net/dnszone"
-	RecordsEndpoint = "records"
-	RecordTypeTXT   = 3
+	dnsAPIURL       = "https://api.bunny.net/dnszone"
+	recordsEndpoint = "records"
 )
 
-// bunnyClient encapsulates the HTTP client and configuration for API requests
 type bunnyClient struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-// newBunnyClient initializes a new bunnyClient, reusing the underlying http.Client
 func newBunnyClient(apiKey string) *bunnyClient {
 	return &bunnyClient{
 		apiKey: apiKey,
@@ -38,43 +35,41 @@ func newBunnyClient(apiKey string) *bunnyClient {
 	}
 }
 
-// addTxtRecord creates a TXT record in the Bunny zone.
 func (c *bunnyClient) addTxtRecord(zoneID int, host string, key string) error {
-	payload := internal.CreateRecordRequest{Type: RecordTypeTXT, Ttl: 120, Value: key, Name: host}
+	payload := internal.CreateRecordRequest{Type: internal.RecordTypeTXT, TTL: 120, Value: key, Name: host}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record payload: %w", err)
 	}
 
-	reqUrl, err := url.JoinPath(DnsApiUrl, fmt.Sprint(zoneID), RecordsEndpoint)
+	reqURL, err := url.JoinPath(dnsAPIURL, fmt.Sprint(zoneID), recordsEndpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	_, err = c.doRequest(reqUrl, "PUT", bytes.NewReader(data))
+	_, err = c.doRequest(reqURL, "PUT", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create record: %w", err)
 	}
 	return nil
 }
 
-// deleteTxtRecord removes all matching TXT records from the provided slice.
 func (c *bunnyClient) deleteTxtRecord(zoneID int, records []internal.Record, host string, key string) (int, error) {
 	deleted := 0
 	var failed []int
 
 	for _, record := range records {
-		if record.Value == key && record.Type == RecordTypeTXT && record.Name == host {
-			reqUrl, err := url.JoinPath(DnsApiUrl, fmt.Sprint(zoneID), RecordsEndpoint, fmt.Sprint(record.Id))
+		if record.Value == key && record.Type == internal.RecordTypeTXT && record.Name == host {
+			reqURL, err := url.JoinPath(dnsAPIURL, fmt.Sprint(zoneID), recordsEndpoint, fmt.Sprint(record.ID))
 			if err != nil {
-				klog.Warningf("failed to build URL for record %d: %v", record.Id, err)
-				failed = append(failed, record.Id)
+				klog.Warningf("failed to build URL for record %d: %v", record.ID, err)
+				failed = append(failed, record.ID)
 				continue
 			}
 
-			if _, err := c.doRequest(reqUrl, "DELETE", nil); err != nil {
-				klog.Warningf("failed to delete record %d: %v", record.Id, err)
-				failed = append(failed, record.Id)
+			if _, err := c.doRequest(reqURL, "DELETE", nil); err != nil {
+				klog.Warningf("failed to delete record %d: %v", record.ID, err)
+				failed = append(failed, record.ID)
 				continue
 			}
 			deleted++
@@ -87,7 +82,6 @@ func (c *bunnyClient) deleteTxtRecord(zoneID int, records []internal.Record, hos
 	return deleted, nil
 }
 
-// getHostFromZone derives the relative DNS host name from a fully-qualified domain name.
 func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
 	if fqdn == "" {
@@ -116,8 +110,6 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	return host, nil
 }
 
-// resolveZone dynamically traverses the domain tree, requests the correct zone from the API,
-// and derives the relative host name for the TXT record.
 func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 	challengeDomain := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(fqdn)), ".")
 	challengeDomain = strings.TrimPrefix(challengeDomain, "_acme-challenge.")
@@ -126,12 +118,12 @@ func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 	if len(parts) < 2 {
 		return nil, "", fmt.Errorf("FQDN '%s' is too short to determine a zone", fqdn)
 	}
-	// Iterate from shortest valid parent zone to most specific subdomain zone.
+
 	for i := len(parts) - 2; i >= 0; i-- {
 		searchDomain := strings.Join(parts[i:], ".")
 
-		reqUrl := fmt.Sprintf("%s?search=%s", DnsApiUrl, url.QueryEscape(searchDomain))
-		body, err := c.doRequest(reqUrl, "GET", nil)
+		reqURL := fmt.Sprintf("%s?search=%s", dnsAPIURL, url.QueryEscape(searchDomain))
+		body, err := c.doRequest(reqURL, "GET", nil)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to search for zone '%s': %w", searchDomain, err)
 		}
@@ -143,7 +135,6 @@ func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 
 		for _, z := range list.Items {
 			if strings.ToLower(z.Domain) == searchDomain {
-				// Zone found, now calculate the relative host
 				host, err := getHostFromZone(fqdn, z.Domain)
 				if err != nil {
 					return nil, "", fmt.Errorf("failed to derive host: %w", err)
@@ -155,10 +146,9 @@ func (c *bunnyClient) resolveZone(fqdn string) (*internal.Zone, string, error) {
 	return nil, "", fmt.Errorf("could not dynamically find a matching zone for FQDN '%s'", fqdn)
 }
 
-// doRequest executes a generic Bunny DNS HTTP API request using the configured client.
-func (c *bunnyClient) doRequest(reqUrl, method string, body io.Reader) ([]byte, error) {
+func (c *bunnyClient) doRequest(reqURL, method string, body io.Reader) ([]byte, error) {
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, method, reqUrl, body)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build request: %w", err)
 	}
@@ -173,7 +163,7 @@ func (c *bunnyClient) doRequest(reqUrl, method string, body io.Reader) ([]byte, 
 
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
-			klog.Warningf("failed to close response body for %s %s: %v", method, reqUrl, cerr)
+			klog.Warningf("failed to close response body for %s %s: %v", method, reqURL, cerr)
 		}
 	}()
 
@@ -187,5 +177,5 @@ func (c *bunnyClient) doRequest(reqUrl, method string, body io.Reader) ([]byte, 
 	}
 
 	return nil, fmt.Errorf("API error: status=%s, url=%s, method=%s, body=%s",
-		resp.Status, reqUrl, method, string(respBody))
+		resp.Status, reqURL, method, string(respBody))
 }
