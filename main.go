@@ -51,7 +51,7 @@ func (n *bunnyDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	zone, host, err := bunnyClient.ResolveZone(cr.ResolvedFQDN)
+	zone, host, err := bunnyClient.ResolveZone(context.Background(), cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (n *bunnyDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 		}
 	}
 
-	if err := bunnyClient.AddTXTRecord(zone.ID, host, cr.Key); err != nil {
+	if err := bunnyClient.AddTXTRecord(context.Background(), zone.ID, host, cr.Key); err != nil {
 		return err
 	}
 	klog.Infof("successfully presented challenge for domain '%s'", cr.DNSName)
@@ -76,12 +76,12 @@ func (n *bunnyDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	zone, host, err := bunnyClient.ResolveZone(cr.ResolvedFQDN)
+	zone, host, err := bunnyClient.ResolveZone(context.Background(), cr.ResolvedFQDN)
 	if err != nil {
 		return err
 	}
 
-	deleted, err := bunnyClient.DeleteTXTRecord(zone.ID, zone.Records, host, cr.Key)
+	deleted, err := bunnyClient.DeleteTXTRecord(context.Background(), zone.ID, zone.Records, host, cr.Key)
 	if err != nil {
 		return fmt.Errorf("cleanup incomplete (%d record(s) already deleted): %w", deleted, err)
 	}

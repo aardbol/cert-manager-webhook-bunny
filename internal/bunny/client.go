@@ -22,6 +22,7 @@ const (
 type Client struct {
 	apiKey     string
 	httpClient *http.Client
+	baseURL    string
 }
 
 func NewClient(apiKey string) *Client {
@@ -30,42 +31,43 @@ func NewClient(apiKey string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		baseURL: dnsAPIURL,
 	}
 }
 
-func (c *Client) AddTXTRecord(zoneID int, host string, key string) error {
+func (c *Client) AddTXTRecord(ctx context.Context, zoneID int, host string, key string) error {
 	payload := CreateRecordRequest{Type: RecordTypeTXT, TTL: 120, Value: key, Name: host}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record payload: %w", err)
 	}
 
-	reqURL, err := url.JoinPath(dnsAPIURL, fmt.Sprint(zoneID), recordsEndpoint)
+	reqURL, err := url.JoinPath(c.baseURL, fmt.Sprint(zoneID), recordsEndpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	_, err = c.doRequest(reqURL, "PUT", bytes.NewReader(data))
+	_, err = c.doRequest(ctx, reqURL, "PUT", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create record: %w", err)
 	}
 	return nil
 }
 
-func (c *Client) DeleteTXTRecord(zoneID int, records []Record, host string, key string) (int, error) {
+func (c *Client) DeleteTXTRecord(ctx context.Context, zoneID int, records []Record, host string, key string) (int, error) {
 	deleted := 0
 	var failed []int
 
 	for _, record := range records {
 		if record.Value == key && record.Type == RecordTypeTXT && record.Name == host {
-			reqURL, err := url.JoinPath(dnsAPIURL, fmt.Sprint(zoneID), recordsEndpoint, fmt.Sprint(record.ID))
+			reqURL, err := url.JoinPath(c.baseURL, fmt.Sprint(zoneID), recordsEndpoint, fmt.Sprint(record.ID))
 			if err != nil {
 				klog.Warningf("failed to build URL for record %d: %v", record.ID, err)
 				failed = append(failed, record.ID)
 				continue
 			}
 
-			if _, err := c.doRequest(reqURL, "DELETE", nil); err != nil {
+			if _, err := c.doRequest(ctx, reqURL, "DELETE", nil); err != nil {
 				klog.Warningf("failed to delete record %d: %v", record.ID, err)
 				failed = append(failed, record.ID)
 				continue
@@ -108,7 +110,7 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	return host, nil
 }
 
-func (c *Client) ResolveZone(fqdn string) (*Zone, string, error) {
+func (c *Client) ResolveZone(ctx context.Context, fqdn string) (*Zone, string, error) {
 	challengeDomain := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(fqdn)), ".")
 	challengeDomain = strings.TrimPrefix(challengeDomain, "_acme-challenge.")
 
@@ -120,8 +122,8 @@ func (c *Client) ResolveZone(fqdn string) (*Zone, string, error) {
 	for i := len(parts) - 2; i >= 0; i-- {
 		searchDomain := strings.Join(parts[i:], ".")
 
-		reqURL := fmt.Sprintf("%s?search=%s", dnsAPIURL, url.QueryEscape(searchDomain))
-		body, err := c.doRequest(reqURL, "GET", nil)
+		reqURL := fmt.Sprintf("%s?search=%s", c.baseURL, url.QueryEscape(searchDomain))
+		body, err := c.doRequest(ctx, reqURL, "GET", nil)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to search for zone '%s': %w", searchDomain, err)
 		}
@@ -144,8 +146,7 @@ func (c *Client) ResolveZone(fqdn string) (*Zone, string, error) {
 	return nil, "", fmt.Errorf("could not dynamically find a matching zone for FQDN '%s'", fqdn)
 }
 
-func (c *Client) doRequest(reqURL, method string, body io.Reader) ([]byte, error) {
-	ctx := context.Background()
+func (c *Client) doRequest(ctx context.Context, reqURL, method string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build request: %w", err)
