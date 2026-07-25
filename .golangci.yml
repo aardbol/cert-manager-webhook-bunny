@@ -17,6 +17,11 @@ linters:
     - unconvert
     - unused
     - whitespace
+    - bodyclose
+    - dupword
+    - funlen
+    - gocyclo
+    - nilerr
 
   exclusions:
     rules:
@@ -26,6 +31,14 @@ linters:
           - goconst
           - funlen
           - noctx
+          - gocyclo
+          - gosec
+      - path: ^main\.go
+        linters:
+          - forbidigo
+      - linters:
+          - gosec
+        text: G704
 
   settings:
     errcheck:
@@ -47,6 +60,11 @@ linters:
     staticcheck:
       checks:
         - "-QF1008"
+    funlen:
+      lines: 80
+      statements: 60
+    gocyclo:
+      min-complexity: 15
 
 formatters:
   enable:
