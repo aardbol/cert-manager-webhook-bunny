@@ -256,6 +256,122 @@ func TestDeleteTXTRecord(t *testing.T) {
 	}
 }
 
+func TestDoRequestSendsHeaders(t *testing.T) {
+	t.Parallel()
+
+	var gotAccessKey, gotContentType, gotAccept string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccessKey = r.Header.Get("AccessKey")
+		gotContentType = r.Header.Get("Content-Type")
+		gotAccept = r.Header.Get("Accept")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := &Client{apiKey: "test-key", httpClient: &http.Client{}}
+	body, err := client.doRequest(context.Background(), server.URL, "GET", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(body) != "ok" {
+		t.Fatalf("expected body %q, got %q", "ok", body)
+	}
+	if gotAccessKey != "test-key" {
+		t.Errorf("expected AccessKey header %q, got %q", "test-key", gotAccessKey)
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("expected Content-Type %q, got %q", "application/json", gotContentType)
+	}
+	if gotAccept != "application/json" {
+		t.Errorf("expected Accept %q, got %q", "application/json", gotAccept)
+	}
+}
+
+func TestDoRequestTruncatesErrorBody(t *testing.T) {
+	t.Parallel()
+
+	longBody := strings.Repeat("x", 500)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(longBody))
+	}))
+	defer server.Close()
+
+	client := &Client{apiKey: "test-key", httpClient: &http.Client{}}
+	_, err := client.doRequest(context.Background(), server.URL, "GET", nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "... (truncated)") {
+		t.Fatalf("expected truncated error body, got: %v", err)
+	}
+	if strings.Contains(err.Error(), longBody) {
+		t.Fatalf("error should not contain full long body, got: %v", err)
+	}
+}
+
+func TestDoRequestContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	client := &Client{apiKey: "test-key", httpClient: &http.Client{}}
+	_, err := client.doRequest(ctx, "http://localhost:0/never", "GET", nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+}
+
+func TestResolveZoneDelegatedZone(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("search") {
+		case "example.com":
+			w.Write([]byte(`{"Items":[]}`))
+		case "foo.example.com":
+			w.Write([]byte(`{"Items":[{"Id":5,"Domain":"foo.example.com"}]}`))
+		default:
+			w.Write([]byte(`{"Items":[]}`))
+		}
+	}))
+	defer server.Close()
+
+	client := &Client{apiKey: "test-key", httpClient: &http.Client{}, baseURL: server.URL + "/dnszone"}
+
+	zone, host, err := client.ResolveZone(context.Background(), "_acme-challenge.foo.example.com.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if zone.Domain != "foo.example.com" {
+		t.Fatalf("expected zone domain %q, got %q", "foo.example.com", zone.Domain)
+	}
+	if host != "_acme-challenge" {
+		t.Fatalf("expected host %q, got %q", "_acme-challenge", host)
+	}
+}
+
+func TestResolveZoneSelectsMatchingItem(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Items":[{"Id":1,"Domain":"other.com"},{"Id":2,"Domain":"example.com"}]}`))
+	}))
+	defer server.Close()
+
+	client := &Client{apiKey: "test-key", httpClient: &http.Client{}, baseURL: server.URL + "/dnszone"}
+
+	zone, _, err := client.ResolveZone(context.Background(), "_acme-challenge.example.com.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if zone.ID != 2 {
+		t.Fatalf("expected to select item with ID 2, got %d", zone.ID)
+	}
+}
+
 func TestTXTRecordManagementIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
