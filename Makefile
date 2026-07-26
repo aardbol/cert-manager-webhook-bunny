@@ -7,6 +7,8 @@ GOOS ?= linux
 GOARCH ?= amd64
 LDFLAGS ?= -w -extldflags "-static"
 
+HELM_CHART_DIR := deploy/helm
+
 .PHONY: all
 all: clean tidy fmt vet test build
 
@@ -38,6 +40,17 @@ lint:
 .PHONY: clean
 clean:
 	$(RM) webhook
+
+.PHONY: helm-lint
+helm-lint:
+	helm lint $(HELM_CHART_DIR)
+
+.PHONY: helm-unittest
+helm-unittest:
+	helm unittest $(HELM_CHART_DIR)
+
+.PHONY: helm-test
+helm-test: helm-lint helm-unittest
 
 .PHONY: container-build
 container-build:
