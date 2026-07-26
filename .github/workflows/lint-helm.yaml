@@ -1,0 +1,48 @@
+name: Lint Helm
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'deploy/helm/**'
+      - '.github/workflows/lint-helm.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'deploy/helm/**'
+      - '.github/workflows/lint-helm.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run helm lint
+        run: make helm-lint
+
+      - name: Run helm unit tests
+        run: make helm-unittest
+
+      - name: Run kube-linter
+        uses: stackrox/kube-linter-action@87802a2f4e01abebb3ee3c67a3002fea71f6eae5 # v1.0.7
+        with:
+          directory: deploy/helm
+          config: deploy/helm/.kube-linter.yaml
+          format: plain
+
+      - name: Run kubeconform
+        uses: aardbol/k8s-lint@4676a66f5a37b93f2cf75ecbe498d770b9d7d2ce # v5.1.0
+        with:
+          manifests: deploy/helm/
+          lintType: kubeconform
+          kubeconformOpts: -summary -strict -ignore-missing-schemas
