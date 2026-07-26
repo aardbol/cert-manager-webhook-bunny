@@ -1,0 +1,21 @@
+checks:
+  exclude:
+    # CSI node DaemonSet requires hostNetwork for node plugins
+    - host-network
+    # CSI node plugin requires privileged access for mount propagation
+    - privileged-container
+    - privilege-escalation-container
+    # CSI node plugin needs /dev and /var/lib/kubelet mounts
+    - sensitive-host-mounts
+    # :latest tag is the chart default; users override via values
+    - latest-tag
+    # Resource requests/limits left empty to match raw manifest defaults;
+    # users set via controller.resources / node.resources values
+    - unset-cpu-requirements
+    - unset-memory-requirements
+    # Snapshot controller anti-affinity not currently configured
+    - no-anti-affinity
+    # Root filesystem and runAsNonRoot not set on all containers to
+    # match current manifest behavior; may be tightened in future
+    - no-read-only-root-fs
+    - run-as-non-root

@@ -1,0 +1,9 @@
+# Patterns to ignore when building Helm packages.
+# Documented: https://helm.sh/docs/topics/charts/#the-helmignore-file
+.git
+.gitignore
+*.swp
+*.swo
+*~
+.DS_Store
+tests/
