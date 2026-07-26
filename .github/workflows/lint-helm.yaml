@@ -27,11 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run helm lint
-        run: make helm-lint
-
-      - name: Run helm unit tests
-        run: make helm-unittest
+      - name: Run helm lint and unit tests
+        run: make helm-test
 
       - name: Run kube-linter
         uses: stackrox/kube-linter-action@87802a2f4e01abebb3ee3c67a3002fea71f6eae5 # v1.0.7

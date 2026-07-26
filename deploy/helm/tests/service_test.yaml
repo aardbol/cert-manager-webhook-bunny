@@ -1,0 +1,42 @@
+suite: Service
+templates:
+  - service.yaml
+tests:
+  - it: creates a Service with default values
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: apiVersion
+          value: v1
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8443
+      - equal:
+          path: spec.ports[0].name
+          value: https
+
+  - it: sets the correct pod selector
+    asserts:
+      - equal:
+          path: spec.selector.app
+          value: cert-manager-webhook-bunny
+
+  - it: supports custom service type and port
+    set:
+      service:
+        type: NodePort
+        port: 8443
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].port
+          value: 8443

@@ -1,0 +1,127 @@
+suite: Deployment
+templates:
+  - deployment.yaml
+tests:
+  - it: creates a Deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: apiVersion
+          value: apps/v1
+      - matchRegex:
+          path: metadata.name
+          pattern: ^RELEASE-NAME-cert-manager-webhook-bunny$
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: cert-manager-webhook-bunny
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-cert-manager-webhook-bunny
+
+  - it: sets the container image using tag by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/aardbol/cert-manager-webhook-bunny:1.2.0
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: sets the GROUP_NAME env var
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: GROUP_NAME
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: bunny.aardbol.dev
+
+  - it: configures HTTPS probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz
+
+  - it: mounts TLS certificates
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: certs
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /tls
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: certs
+
+  - it: sets empty resources by default
+    asserts:
+      - isEmpty:
+          path: spec.template.spec.containers[0].resources
+
+  - it: uses image hash when set
+    set:
+      image:
+        hash: sha256:abc123def456
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/aardbol/cert-manager-webhook-bunny@sha256:abc123def456
+
+  - it: supports custom replica count
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: renders nodeSelector when set
+    set:
+      nodeSelector:
+        disktype: ssd
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.disktype
+          value: ssd
+
+  - it: renders tolerations when set
+    set:
+      tolerations:
+        - key: "key1"
+          operator: "Equal"
+          value: "value1"
+          effect: "NoSchedule"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: key1
+
+  - it: renders affinity when set
+    set:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cert-manager-webhook-bunny
+                topologyKey: kubernetes.io/hostname
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 100

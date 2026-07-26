@@ -1,0 +1,166 @@
+suite: RBAC
+templates:
+  - rbac.yaml
+tests:
+  - it: creates a ServiceAccount
+    asserts:
+      - documentIndex: 0
+        isKind:
+          of: ServiceAccount
+      - documentIndex: 0
+        matchRegex:
+          path: metadata.name
+          pattern: ^RELEASE-NAME-cert-manager-webhook-bunny$
+
+  - it: creates a RoleBinding in kube-system for authentication reader
+    asserts:
+      - documentIndex: 1
+        isKind:
+          of: RoleBinding
+      - documentIndex: 1
+        equal:
+          path: metadata.namespace
+          value: kube-system
+      - documentIndex: 1
+        equal:
+          path: roleRef.name
+          value: extension-apiserver-authentication-reader
+
+  - it: creates a ClusterRoleBinding for auth-delegator
+    asserts:
+      - documentIndex: 2
+        isKind:
+          of: ClusterRoleBinding
+      - documentIndex: 2
+        equal:
+          path: roleRef.name
+          value: system:auth-delegator
+
+  - it: creates a ClusterRole for domain-solver
+    asserts:
+      - documentIndex: 3
+        isKind:
+          of: ClusterRole
+      - documentIndex: 3
+        matchRegex:
+          path: metadata.name
+          pattern: :domain-solver$
+      - documentIndex: 3
+        equal:
+          path: rules[0].apiGroups[0]
+          value: bunny.aardbol.dev
+      - documentIndex: 3
+        equal:
+          path: rules[0].verbs[0]
+          value: create
+
+  - it: creates a ClusterRole for flowcontrol
+    asserts:
+      - documentIndex: 4
+        isKind:
+          of: ClusterRole
+      - documentIndex: 4
+        matchRegex:
+          path: metadata.name
+          pattern: :flowcontrol$
+      - documentIndex: 4
+        equal:
+          path: rules[0].apiGroups[0]
+          value: flowcontrol.apiserver.k8s.io
+
+  - it: creates a ClusterRoleBinding for flowcontrol
+    asserts:
+      - documentIndex: 5
+        isKind:
+          of: ClusterRoleBinding
+      - documentIndex: 5
+        equal:
+          path: roleRef.name
+          value: RELEASE-NAME-cert-manager-webhook-bunny:flowcontrol
+
+  - it: creates a ClusterRoleBinding for domain-solver with cert-manager SA
+    asserts:
+      - documentIndex: 6
+        isKind:
+          of: ClusterRoleBinding
+      - documentIndex: 6
+        equal:
+          path: roleRef.name
+          value: RELEASE-NAME-cert-manager-webhook-bunny:domain-solver
+      - documentIndex: 6
+        equal:
+          path: subjects[0].name
+          value: cert-manager
+      - documentIndex: 6
+        equal:
+          path: subjects[0].namespace
+          value: cert-manager
+
+  - it: creates a Role for secret-reader
+    asserts:
+      - documentIndex: 7
+        isKind:
+          of: Role
+      - documentIndex: 7
+        matchRegex:
+          path: metadata.name
+          pattern: :secret-reader$
+      - documentIndex: 7
+        equal:
+          path: rules[0].resources[0]
+          value: secrets
+      - documentIndex: 7
+        equal:
+          path: rules[0].verbs[0]
+          value: get
+
+  - it: does not restrict secret names by default
+    asserts:
+      - documentIndex: 7
+        notExists:
+          path: rules[0].resourceNames
+
+  - it: creates a RoleBinding for secret-reader
+    asserts:
+      - documentIndex: 8
+        isKind:
+          of: RoleBinding
+      - documentIndex: 8
+        matchRegex:
+          path: metadata.name
+          pattern: :secret-reader$
+
+  - it: restricts secret names when configured
+    set:
+      secretAccess:
+        namespace: cert-manager
+        names:
+          - bunny-api
+          - bunny-api-staging
+    asserts:
+      - documentIndex: 7
+        exists:
+          path: rules[0].resourceNames
+      - documentIndex: 7
+        equal:
+          path: rules[0].resourceNames[0]
+          value: bunny-api
+      - documentIndex: 7
+        equal:
+          path: rules[0].resourceNames[1]
+          value: bunny-api-staging
+
+  - it: uses custom certManager SA in domain-solver binding
+    set:
+      certManager:
+        namespace: custom-ns
+        serviceAccountName: custom-sa
+    asserts:
+      - documentIndex: 6
+        equal:
+          path: subjects[0].name
+          value: custom-sa
+      - documentIndex: 6
+        equal:
+          path: subjects[0].namespace
+          value: custom-ns

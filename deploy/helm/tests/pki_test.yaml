@@ -1,0 +1,75 @@
+suite: PKI
+templates:
+  - pki.yaml
+tests:
+  - it: creates a self-signed Issuer
+    asserts:
+      - documentIndex: 0
+        isKind:
+          of: Issuer
+      - documentIndex: 0
+        matchRegex:
+          path: metadata.name
+          pattern: -selfsign$
+      - documentIndex: 0
+        equal:
+          path: spec.selfSigned
+          value: {}
+
+  - it: creates a CA Certificate
+    asserts:
+      - documentIndex: 1
+        isKind:
+          of: Certificate
+      - documentIndex: 1
+        matchRegex:
+          path: metadata.name
+          pattern: -ca$
+      - documentIndex: 1
+        equal:
+          path: spec.isCA
+          value: true
+      - documentIndex: 1
+        equal:
+          path: spec.duration
+          value: 43800h
+
+  - it: creates a root CA Issuer
+    asserts:
+      - documentIndex: 2
+        isKind:
+          of: Issuer
+      - documentIndex: 2
+        matchRegex:
+          path: metadata.name
+          pattern: -ca$
+      - documentIndex: 2
+        equal:
+          path: spec.ca.secretName
+          value: RELEASE-NAME-cert-manager-webhook-bunny-ca
+
+  - it: creates a serving Certificate
+    asserts:
+      - documentIndex: 3
+        isKind:
+          of: Certificate
+      - documentIndex: 3
+        matchRegex:
+          path: metadata.name
+          pattern: -webhook-tls$
+      - documentIndex: 3
+        equal:
+          path: spec.duration
+          value: 8760h
+      - documentIndex: 3
+        contains:
+          path: spec.dnsNames
+          content: RELEASE-NAME-cert-manager-webhook-bunny
+      - documentIndex: 3
+        contains:
+          path: spec.dnsNames
+          content: RELEASE-NAME-cert-manager-webhook-bunny.NAMESPACE
+      - documentIndex: 3
+        contains:
+          path: spec.dnsNames
+          content: RELEASE-NAME-cert-manager-webhook-bunny.NAMESPACE.svc
