@@ -35,7 +35,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-func (c *Client) AddTXTRecord(ctx context.Context, zoneID int, host string, key string) error {
+func (c *Client) AddTXTRecord(ctx context.Context, zoneID int, host, key string) error {
 	payload := CreateRecordRequest{Type: RecordTypeTXT, TTL: 120, Value: key, Name: host}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -54,7 +54,7 @@ func (c *Client) AddTXTRecord(ctx context.Context, zoneID int, host string, key 
 	return nil
 }
 
-func (c *Client) DeleteTXTRecord(ctx context.Context, zoneID int, records []Record, host string, key string) (int, error) {
+func (c *Client) DeleteTXTRecord(ctx context.Context, zoneID int, records []Record, host, key string) (int, error) {
 	deleted := 0
 	var failed []int
 
@@ -82,10 +82,10 @@ func (c *Client) DeleteTXTRecord(ctx context.Context, zoneID int, records []Reco
 	return deleted, nil
 }
 
-func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
-	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFqdn)), ".")
+func getHostFromZone(resolvedFQDN, zoneName string) (string, error) {
+	fqdn := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(resolvedFQDN)), ".")
 	if fqdn == "" {
-		return "", fmt.Errorf("unable to parse host out of resolved FQDN ('%s')", resolvedFqdn)
+		return "", fmt.Errorf("unable to parse host out of resolved FQDN ('%s')", resolvedFQDN)
 	}
 
 	zoneName = strings.TrimSuffix(strings.TrimSpace(strings.ToLower(zoneName)), ".")
@@ -94,17 +94,17 @@ func getHostFromZone(resolvedFqdn string, zoneName string) (string, error) {
 	}
 
 	if fqdn == zoneName {
-		return "", fmt.Errorf("resolved FQDN ('%s') points to zone apex, expected challenge record below zone", resolvedFqdn)
+		return "", fmt.Errorf("resolved FQDN ('%s') points to zone apex, expected challenge record below zone", resolvedFQDN)
 	}
 
 	suffix := "." + zoneName
 	if !strings.HasSuffix(fqdn, suffix) {
-		return "", fmt.Errorf("resolved FQDN ('%s') is not within zone '%s'", resolvedFqdn, zoneName)
+		return "", fmt.Errorf("resolved FQDN ('%s') is not within zone '%s'", resolvedFQDN, zoneName)
 	}
 
 	host := strings.TrimSuffix(fqdn, suffix)
 	if host == "" {
-		return "", fmt.Errorf("unable to derive relative host from resolved FQDN ('%s')", resolvedFqdn)
+		return "", fmt.Errorf("unable to derive relative host from resolved FQDN ('%s')", resolvedFQDN)
 	}
 
 	return host, nil
@@ -134,7 +134,7 @@ func (c *Client) ResolveZone(ctx context.Context, fqdn string) (*Zone, string, e
 		}
 
 		for _, z := range list.Items {
-			if strings.ToLower(z.Domain) == searchDomain {
+			if strings.EqualFold(z.Domain, searchDomain) {
 				host, err := getHostFromZone(fqdn, z.Domain)
 				if err != nil {
 					return nil, "", fmt.Errorf("failed to derive host: %w", err)
@@ -175,6 +175,10 @@ func (c *Client) doRequest(ctx context.Context, reqURL, method string, body io.R
 		return respBody, nil
 	}
 
+	bodyStr := string(respBody)
+	if len(bodyStr) > 200 {
+		bodyStr = bodyStr[:200] + "... (truncated)"
+	}
 	return nil, fmt.Errorf("API error: status=%s, url=%s, method=%s, body=%s",
-		resp.Status, reqURL, method, string(respBody))
+		resp.Status, reqURL, method, bodyStr)
 }
