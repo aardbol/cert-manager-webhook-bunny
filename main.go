@@ -19,6 +19,8 @@ import (
 	"github.com/aardbol/cert-manager-webhook-bunny/internal/bunny"
 )
 
+const defaultSecretKey = "api-key"
+
 var GroupName = os.Getenv("GROUP_NAME")
 
 func main() {
@@ -119,7 +121,7 @@ func (n *bunnyDNSProviderSolver) getClient(cr *v1alpha1.ChallengeRequest) (*bunn
 
 	key := cfg.SecretKey
 	if key == "" {
-		key = "api-key"
+		key = defaultSecretKey
 	}
 
 	ctx := context.Background()
