@@ -17,6 +17,7 @@ permissions:
   packages: read
 
 env:
+  GO_VERSION: '1.26.5'
   REGISTRY: ghcr.io
 
 jobs:
@@ -56,9 +57,27 @@ jobs:
       contents: read
       packages: write
 
-  release:
+  integration:
     timeout-minutes: 15
-    needs: [detect, build-image]
+    needs: detect
+    if: ${{ needs.detect.outputs.skip == 'false' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run integration tests
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_TEST_FQDN: ${{ secrets.BUNNY_TEST_FQDN }}
+        run: make test-integration
+
+  release:
+    needs: [detect, build-image, integration]
     if: ${{ needs.detect.outputs.skip == 'false' }}
     runs-on: ubuntu-24.04
     permissions:

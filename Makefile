@@ -20,6 +20,10 @@ build:
 test:
 	go test -v ./...
 
+.PHONY: test-integration
+test-integration:
+	go test -tags integration -v ./...
+
 .PHONY: vet
 vet:
 	go vet ./...

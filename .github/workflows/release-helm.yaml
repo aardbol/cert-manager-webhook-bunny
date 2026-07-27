@@ -18,15 +18,18 @@ permissions:
 
 env:
   CHART_DIR: deploy/helm
+  GO_VERSION: '1.26.5'
   REGISTRY: ghcr.io
   CHART_OCI_REPO: ${{ github.repository_owner }}/charts
 
 jobs:
   detect:
+    timeout-minutes: 5
     runs-on: ubuntu-24.04
     outputs:
       skip: ${{ steps.check.outputs.skip_release }}
       chart_version: ${{ steps.check.outputs.chart_version }}
+      app_version_bumped: ${{ steps.check.outputs.app_version_bumped }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -36,6 +39,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chart_version=$(yq '.version' "$CHART_DIR/Chart.yaml")
+          app_version=$(yq '.appVersion' "$CHART_DIR/Chart.yaml")
           echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
 
           if gh release view "helm-v$chart_version" > /dev/null 2>&1; then
@@ -46,9 +50,34 @@ jobs:
 
           echo "skip_release=false" >> "$GITHUB_OUTPUT"
 
-  release-helm:
+          if gh release view "v$app_version" > /dev/null 2>&1; then
+            echo "app_version_bumped=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release v$app_version has changed, skipping integration here."
+            echo "app_version_bumped=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  integration:
     timeout-minutes: 15
-    needs: [detect]
+    needs: detect
+    if: ${{ needs.detect.outputs.skip_release == 'false' && needs.detect.outputs.app_version_bumped == 'false' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run integration tests
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_TEST_FQDN: ${{ secrets.BUNNY_TEST_FQDN }}
+        run: make test-integration
+
+  release-helm:
+    needs: [detect, integration]
     if: ${{ needs.detect.outputs.skip_release == 'false' }}
     runs-on: ubuntu-24.04
     permissions:
