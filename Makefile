@@ -1,7 +1,7 @@
 IMAGE_NAME := cert-manager-webhook-bunny
 IMAGE_TAG  := local
 
-GO_VERSION ?= 1.25
+GO_VERSION ?= 1.26.5
 CGO_ENABLED ?= 0
 GOOS ?= linux
 GOARCH ?= amd64

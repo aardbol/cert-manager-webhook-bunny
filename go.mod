@@ -1,6 +1,6 @@
 module github.com/aardbol/cert-manager-webhook-bunny
 
-go 1.25.0
+go 1.26.5
 
 require (
 	github.com/cert-manager/cert-manager v1.19.5
