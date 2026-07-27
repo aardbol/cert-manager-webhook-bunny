@@ -1,0 +1,57 @@
+on:
+  workflow_call:
+    inputs:
+      tags:
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        id: build-image
+        uses: aardbol/buildah-build@19b13acaef86fdcd664ee434704193633b5eee8b # v3.0.2
+        with:
+          image: ${{ github.repository }}
+          tags: ${{ inputs.tags }}
+          containerfiles: ./Containerfile
+          platforms: linux/amd64,linux/arm64
+          extra-args: --pull=always
+
+      - name: Push image
+        id: push-image
+        uses: aardbol-actions/push-to-registry@201ba5b18ef5666165705f055acba68b8c3b111c # v3.0.2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ inputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+      - name: Build summary
+        run: |
+          echo "## Container image" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ steps.build-image.outputs.image }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tags | \`${{ inputs.tags }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Digest | \`${{ steps.push-image.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"

@@ -62,3 +62,14 @@ container-build:
 .PHONY: container-run
 container-run:
 	podman run --rm -it --read-only --security-opt=no-new-privileges $(IMAGE_NAME):$(IMAGE_TAG)
+
+.PHONY: release-notes
+release-notes:
+	@tag="$(TAG)"; \
+	if [ -z "$$tag" ]; then echo "ERROR: TAG is required. Usage: make release-notes TAG=<version>" >&2; exit 1; fi; \
+	version=$${tag#v}; \
+	awk \
+		'/^## \['"$$version"'\]/ { flag = 1; next } \
+		/^## \[/ { if ( flag ) { exit; } } \
+		flag { if ( n ) { print prev; } n++; prev = $$0 }' \
+		CHANGELOG.md
