@@ -51,7 +51,9 @@ helm-lint:
 
 .PHONY: helm-unittest
 helm-unittest:
-	helm plugin install https://github.com/helm-unittest/helm-unittest.git 2>/dev/null || true
+	@if ! helm plugin list | grep -q unittest > /dev/null 2>&1; then \
+		helm plugin install https://github.com/helm-unittest/helm-unittest.git; \
+	fi
 	helm unittest $(HELM_CHART_DIR)
 
 .PHONY: helm-test
