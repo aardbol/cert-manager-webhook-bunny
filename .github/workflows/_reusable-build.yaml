@@ -40,7 +40,7 @@ jobs:
 
       - name: Push image
         id: push-image
-        uses: aardbol-actions/push-to-registry@201ba5b18ef5666165705f055acba68b8c3b111c # v3.0.2
+        uses: aardbol-actions/push-to-registry@42cc3e1c55f48de848bcf5009ba3e502d7faa934 # v3.1.0
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ inputs.tags }}
