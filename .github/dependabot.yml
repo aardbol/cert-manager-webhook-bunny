@@ -21,6 +21,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
 
   - package-ecosystem: docker
     commit-message:
