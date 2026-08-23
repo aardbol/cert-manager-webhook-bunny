@@ -33,9 +33,29 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    groups:
+      docker:
+        patterns:
+          - "*"
 
-  - package-ecosystem: devcontainers # https://containers.dev/guide/dependabot
+  - package-ecosystem: devcontainers
     directory: /
     schedule:
       interval: weekly
       day: monday
+    groups:
+      devcontainers:
+        patterns:
+          - "*"
+
+  - package-ecosystem: helm
+    commit-message:
+      prefix: chore(helm)
+    directory: /deploy/helm
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      helm:
+        patterns:
+          - "*"

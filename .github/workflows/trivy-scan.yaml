@@ -35,83 +35,10 @@ jobs:
   analyze:
     permissions:
       contents: read
-      security-events: write
       actions: read
-    name: Trivy scan
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - if: github.event_name == 'schedule'
-        name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Trivy vulnerability scanner (filesystem)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: 'fs'
-          scan-ref: .
-          format: 'sarif'
-          output: 'trivy-fs-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-          trivyignores: '.trivyignore.yaml'
-
-      - name: Upload filesystem scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
-        with:
-          sarif_file: 'trivy-fs-results.sarif'
-          category: trivy-fs
-
-      - if: github.event_name == 'pull_request'
-        name: Build image for PR scan
-        uses: aardbol/buildah-build@19b13acaef86fdcd664ee434704193633b5eee8b # v3.0.2
-        id: build-image
-        with:
-          containerfiles: ./Containerfile
-          image: cert-manager-webhook-bunny-test
-          tags: latest
-          platforms: linux/amd64
-
-      - if: github.event_name == 'pull_request'
-        name: Export image to tar archive
-        run: podman save -o image.tar cert-manager-webhook-bunny-test:latest
-
-      - if: github.event_name == 'pull_request'
-        name: Run Trivy vulnerability scanner (PR image)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          input: image.tar
-          format: 'sarif'
-          output: 'trivy-pr-image-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-
-      - if: github.event_name == 'pull_request'
-        name: Upload PR image scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
-        with:
-          sarif_file: 'trivy-pr-image-results.sarif'
-          category: trivy-image
-
-      - if: github.event_name == 'schedule'
-        name: Run Trivy vulnerability scanner (image)
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: 'ghcr.io/${{ github.repository }}:latest'
-          format: 'sarif'
-          output: 'trivy-image-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-
-      - if: github.event_name == 'schedule'
-        name: Upload image scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
-        with:
-          sarif_file: 'trivy-image-results.sarif'
-          category: trivy-image
+      security-events: write
+      packages: read
+    uses: upcloud-tools/gha-actions/.github/workflows/trivy.yaml@c0df829cbad57268497db8cfb6174419f925b283
+    with:
+      image_repo: cert-manager-webhook-bunny
+    secrets: inherit

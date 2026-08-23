@@ -1,9 +1,5 @@
 name: Lint Golang
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 on:
   push:
     branches:
@@ -22,27 +18,13 @@ on:
       - go.sum
       - '.github/workflows/lint-golang.yaml'
 
-env:
-  GOLANGCI_LINT_VERSION: v2.12.2
-  GO_VERSION: '1.26.5'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   golangci-lint:
-    timeout-minutes: 5
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          args: --timeout=5m
-          only-new-issues: true
+    uses: upcloud-tools/gha-actions/.github/workflows/lint-golang.yaml@c0df829cbad57268497db8cfb6174419f925b283

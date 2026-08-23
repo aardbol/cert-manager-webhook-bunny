@@ -20,31 +20,38 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: true
 
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        uses: ./.github/actions/ghcr-login
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          VERSION=$(git describe --tags)
+          COMMIT=$(git log --format="%h" -n 1)
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${COMMIT}" >> "${GITHUB_OUTPUT}"
+          echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
-        id: build-image
-        uses: aardbol/buildah-build@19b13acaef86fdcd664ee434704193633b5eee8b # v3.0.2
-        with:
-          image: ${{ github.repository }}
-          tags: ${{ inputs.tags }}
-          containerfiles: ./Containerfile
-          platforms: linux/amd64,linux/arm64
-          extra-args: --pull=always
+        env:
+          CONTAINER_REPO: ${{ steps.meta.outputs.image }}
+          IMAGE_TAG: ${{ inputs.tags }}
+        run: make container-build
 
       - name: Push image
         id: push-image
-        uses: aardbol-actions/push-to-registry@42cc3e1c55f48de848bcf5009ba3e502d7faa934 # v3.1.0
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ inputs.tags }}
-          registry: ${{ env.REGISTRY }}
+        env:
+          CONTAINER_REPO: ${{ steps.meta.outputs.image }}
+          IMAGE_TAG: ${{ inputs.tags }}
+        run: |
+          DIGESTFILE=$(mktemp)
+          make push-image DIGEST_FILE="${DIGESTFILE}"
+          echo "digest=$(cat "${DIGESTFILE}")" >> "${GITHUB_OUTPUT}"
 
       - name: Build summary
         run: |
@@ -52,6 +59,6 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image | \`${{ steps.build-image.outputs.image }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ steps.meta.outputs.image }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Tags | \`${{ inputs.tags }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Digest | \`${{ steps.push-image.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
