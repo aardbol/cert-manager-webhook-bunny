@@ -2,8 +2,8 @@ apiVersion: v2
 name: cert-manager-webhook-bunny
 description: A Helm chart for a cert-manager ACME DNS01 webhook solver for Bunny DNS
 type: application
-version: "1.3.1"
-appVersion: "1.3.1"
+version: "1.4.0"
+appVersion: "v1.4.0"
 home: https://github.com/aardbol/cert-manager-webhook-bunny
 sources:
   - https://github.com/aardbol/cert-manager-webhook-bunny
@@ -26,4 +26,9 @@ annotations:
     - name: Support
       url: https://github.com/aardbol/cert-manager-webhook-bunny/issues
   artifacthub.io/changes: |
-    - "Bump app version to v1.3.1"
+    - kind: added
+      description: values.schema.json for input validation
+    - kind: changed
+      description: appVersion now includes v prefix (e.g., v1.4.0)
+    - kind: removed
+      description: image.hash field removed, use image.tag only
