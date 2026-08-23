@@ -48,9 +48,5 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{- define "cert-manager-webhook-bunny.fullImageName" -}}
-{{- if empty .Values.image.hash -}}
 {{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
-{{- else -}}
-{{- printf "%s@%s" .Values.image.repository .Values.image.hash -}}
-{{- end -}}
 {{- end -}}

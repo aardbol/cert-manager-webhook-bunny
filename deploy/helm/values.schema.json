@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "groupName": {
+      "type": "string",
+      "description": "API group used by cert-manager to find this webhook solver",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "certManager": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "default": "cert-manager"
+        },
+        "serviceAccountName": {
+          "type": "string",
+          "default": "cert-manager"
+        }
+      },
+      "required": ["namespace", "serviceAccountName"]
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string",
+          "default": ""
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "Never", "IfNotPresent"],
+          "default": "IfNotPresent"
+        }
+      },
+      "required": ["repository"]
+    },
+    "nameOverride": {
+      "type": "string",
+      "default": ""
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "default": ""
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "default": "ClusterIP"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 443
+        }
+      }
+    },
+    "secretAccess": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "default": "cert-manager"
+        },
+        "names": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "requests": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "default": {}
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "affinity": {
+      "type": "object",
+      "default": {}
+    }
+  },
+  "required": ["groupName", "certManager", "image"]
+}

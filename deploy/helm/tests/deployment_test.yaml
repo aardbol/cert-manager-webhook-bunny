@@ -69,15 +69,6 @@ tests:
       - isEmpty:
           path: spec.template.spec.containers[0].resources
 
-  - it: uses image hash when set
-    set:
-      image:
-        hash: sha256:abc123def456
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].image
-          value: ghcr.io/aardbol/cert-manager-webhook-bunny@sha256:abc123def456
-
   - it: supports custom replica count
     set:
       replicaCount: 3
