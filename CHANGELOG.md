@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-23
+
+### Added
+- Helm: `values.schema.json` for input validation.
+
+### Changed
+- CI: migrated workflows to shared workflows from `upcloud-tools/gha-actions` with git submodule for composite actions.
+- CI: container build uses a `buildah` script (`build-image.sh`) instead of a multi-stage `Containerfile`.
+- Helm: `appVersion` in Chart.yaml now uses `v` prefix (e.g., `v1.4.0`).
+
+### Removed
+- `Containerfile` replaced by `build-image.sh`.
+- Helm: `image.hash` field from Helm chart (use `image.tag` only).
+
 ## [1.3.1] - 2025-07-28
 
 ### Changed
