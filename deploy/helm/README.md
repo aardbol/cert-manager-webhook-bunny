@@ -83,6 +83,29 @@ helm install cert-manager-webhook-bunny oci://ghcr.io/aardbol/charts/cert-manage
 
 From that point, the issuer configured above should be able to solve DNS01 challenges using ``cert-manager-webhook-bunny``.
 
+Values
+------
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| groupName | string | `"bunny.aardbol.dev"` | API group used by cert-manager to find this webhook solver |
+| replicaCount | int | `1` | Number of webhook replicas |
+| certManager.namespace | string | `"cert-manager"` | Namespace where cert-manager runs |
+| certManager.serviceAccountName | string | `"cert-manager"` | Service account used by cert-manager |
+| image.repository | string | `"ghcr.io/aardbol/cert-manager-webhook-bunny"` | Container image repository |
+| image.tag | string | `""` | Container image tag (defaults to appVersion from Chart.yaml) |
+| image.pullPolicy | string | `"IfNotPresent"` | Container image pull policy |
+| nameOverride | string | `""` | Override the chart name |
+| fullnameOverride | string | `""` | Override the full resource names |
+| service.type | string | `"ClusterIP"` | Kubernetes service type |
+| service.port | int | `443` | Kubernetes service port |
+| secretAccess.namespace | string | `"cert-manager"` | Namespace where Bunny API secrets are allowed to be read from |
+| secretAccess.names | list | `[]` | List of Secret names the webhook may read (empty = any Secret in namespace) |
+| resources | object | `{}` | Resource requests and limits |
+| nodeSelector | object | `{}` | Node selector for pod scheduling |
+| tolerations | list | `[]` | Tolerations for pod scheduling |
+| affinity | object | `{}` | Affinity rules for pod scheduling |
+
 Notes
 -----
 
@@ -92,4 +115,4 @@ If your ``secretNamespace`` in the Issuer points to a different namespace, the w
 License
 -------
 
-[Apache 2 License](../../LICENSE)
+[Apache 2 License](https://github.com/aardbol/cert-manager-webhook-bunny/blob/main/LICENSE)
