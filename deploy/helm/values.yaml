@@ -11,7 +11,7 @@ certManager:
 
 image:
   repository: ghcr.io/aardbol/cert-manager-webhook-bunny
-  tag: "v1.3.1"
+  tag: ""
   pullPolicy: IfNotPresent
 
 nameOverride: ""

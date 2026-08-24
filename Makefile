@@ -75,8 +75,9 @@ helm-release-notes:
 	@awk \
 		'/^## \['$(HELM_CHART_VERSION)'\]/ { flag = 1; next } \
 		/^## \[/ { if ( flag ) { exit; } } \
-		flag { if ( n ) { print prev; } n++; prev = $$0 }' \
-		CHANGELOG.md
+		flag { if ( n ) { print prev; } n++; prev = $$0 } \
+		END { if ( flag && n ) { print prev } }' \
+		deploy/helm/CHANGELOG.md
 
 .PHONY: container-build
 container-build:
@@ -103,5 +104,6 @@ release-notes:
 	@awk \
 		'/${CHANGELOG_HEADER}${CHANGELOG_VERSION}/ { flag = 1; next } \
 		/${CHANGELOG_HEADER}/ { if ( flag ) { exit; } } \
-		flag { if ( n ) { print prev; } n++; prev = $$0 }' \
+		flag { if ( n ) { print prev; } n++; prev = $$0 } \
+		END { if ( flag && n ) { print prev } }' \
 		CHANGELOG.md
