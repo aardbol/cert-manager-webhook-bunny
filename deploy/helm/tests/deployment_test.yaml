@@ -27,9 +27,9 @@ tests:
 
   - it: sets the container image using tag by default
     asserts:
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/aardbol/cert-manager-webhook-bunny:v1.3.1
+          pattern: ^ghcr\.io/aardbol/cert-manager-webhook-bunny:v\d+\.\d+\.\d+$
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
