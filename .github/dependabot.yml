@@ -26,18 +26,6 @@ updates:
         patterns:
           - "github/codeql-action/*"
 
-  - package-ecosystem: docker
-    commit-message:
-      prefix: chore(docker)
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    groups:
-      docker:
-        patterns:
-          - "*"
-
   - package-ecosystem: devcontainers
     directory: /
     schedule:

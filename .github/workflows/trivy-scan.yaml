@@ -12,7 +12,7 @@ on:
       - "**/*.go"
       - go.mod
       - go.sum
-      - Containerfile
+      - build-image.sh
       - '.github/workflows/trivy-scan.yaml'
       - '.trivyignore.yaml'
   pull_request:
@@ -22,7 +22,7 @@ on:
       - "**/*.go"
       - go.mod
       - go.sum
-      - Containerfile
+      - build-image.sh
       - '.github/workflows/trivy-scan.yaml'
       - '.trivyignore.yaml'
   schedule:

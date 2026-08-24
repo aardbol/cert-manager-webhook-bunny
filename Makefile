@@ -4,6 +4,11 @@ GOOS ?= linux
 GOARCH ?= amd64
 LDFLAGS ?= -w -extldflags "-static"
 
+TAG ?= $(shell git describe --tags)
+COMMIT = $(shell git log --format="%h" -n 1)
+TREE_STATE = $(shell git diff --quiet && echo 'clean' || echo 'dirty')
+TARGETARCH ?= amd64
+
 CONTAINER_REPO ?= ghcr.io/aardbol/cert-manager-webhook-bunny
 IMAGE_TAG ?= local
 
@@ -75,10 +80,8 @@ helm-release-notes:
 
 .PHONY: container-build
 container-build:
-	buildah build --platform linux/amd64 \
-		--build-arg GO_VERSION=$(GO_VERSION) \
-		-t $(CONTAINER_REPO):$(IMAGE_TAG) \
-		-f Containerfile .
+	TARGETARCH=$(TARGETARCH) VERSION=$(TAG) COMMIT=$(COMMIT) TREE_STATE=$(TREE_STATE) \
+	IMAGE=$(CONTAINER_REPO) IMAGE_TAG=$(IMAGE_TAG) ./build-image.sh
 
 .PHONY: push-image
 push-image:

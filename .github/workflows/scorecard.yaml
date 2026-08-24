@@ -12,7 +12,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - Containerfile
+      - build-image.sh
       - '.github/workflows/**'
       - '.golangci.yml'
       - '.trivyignore.yaml'
