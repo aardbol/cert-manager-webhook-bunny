@@ -1,4 +1,4 @@
-GO_VERSION ?= 1.26.5
+GO_VERSION ?= 1.26.8
 CGO_ENABLED ?= 0
 GOOS ?= linux
 GOARCH ?= amd64
