@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-09-05
+
+### Added
+
+- Container images are now multi-arch (`linux/amd64` and `linux/arm64`).
+
+### Changed
+
+- Bump Go toolchain from v1.26.5 to v1.26.8.
+- Bump `github.com/cert-manager/cert-manager` from v1.21.0 to v1.21.1.
+- Bump `google.golang.org/grpc` from v1.82.1 to v1.83.1.
+- Bump indirect dependencies to implement security updates.
+
 ## [1.4.0] - 2026-08-23
 
 ### Changed
@@ -50,4 +63,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial release of cert-manager-webhook-bunny.
-

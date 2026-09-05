@@ -13,7 +13,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
       contents: read
       packages: write
@@ -44,17 +47,55 @@ jobs:
       - name: Build image
         env:
           CONTAINER_REPO: ${{ steps.meta.outputs.image }}
-          IMAGE_TAG: ${{ inputs.tags }}
+          IMAGE_TAG: ${{ inputs.tags }}-${{ matrix.arch }}
+          TARGETARCH: ${{ matrix.arch }}
         run: make container-build
 
       - name: Push image
         id: push-image
         env:
           CONTAINER_REPO: ${{ steps.meta.outputs.image }}
-          IMAGE_TAG: ${{ inputs.tags }}
+          IMAGE_TAG: ${{ inputs.tags }}-${{ matrix.arch }}
         run: |
           DIGESTFILE=$(mktemp)
           make push-image DIGEST_FILE="${DIGESTFILE}"
+          echo "digest=$(cat "${DIGESTFILE}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Build summary
+        run: |
+          echo "### Image \`${{ steps.meta.outputs.image }}:${{ inputs.tags }}-${{ matrix.arch }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: \`${{ steps.push-image.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  manifest:
+    name: Publish multi-arch image
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Log in to GHCR
+        uses: ./.github/actions/ghcr-login
+
+      - name: Assemble and push manifest list
+        id: manifest
+        env:
+          CONTAINER_REPO: ${{ env.REGISTRY }}/${{ github.repository }}
+          IMAGE_TAG: ${{ inputs.tags }}
+          ARCHS: amd64 arm64
+        run: |
+          DIGESTFILE=$(mktemp)
+          make manifest-push DIGEST_FILE="${DIGESTFILE}"
           echo "digest=$(cat "${DIGESTFILE}")" >> "${GITHUB_OUTPUT}"
 
       - name: Build summary
@@ -63,6 +104,6 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image | \`${{ steps.meta.outputs.image }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Tags | \`${{ inputs.tags }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Digest | \`${{ steps.push-image.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ env.REGISTRY }}/${{ github.repository }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tags | \`${{ inputs.tags }}\` (linux/amd64, linux/arm64) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Digest | \`${{ steps.manifest.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"

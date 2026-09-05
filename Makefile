@@ -7,10 +7,11 @@ LDFLAGS ?= -w -extldflags "-static"
 TAG ?= $(shell git describe --tags)
 COMMIT = $(shell git log --format="%h" -n 1)
 TREE_STATE = $(shell git diff --quiet && echo 'clean' || echo 'dirty')
-TARGETARCH ?= amd64
+TARGETARCH ?= $(shell go env GOARCH)
 
 CONTAINER_REPO ?= ghcr.io/aardbol/cert-manager-webhook-bunny
 IMAGE_TAG ?= local
+ARCHS ?= amd64 arm64
 
 HELM_CHART_DIR := deploy/helm
 HELM_CHART_VERSION ?= $(shell yq .version $(HELM_CHART_DIR)/Chart.yaml)
@@ -91,6 +92,19 @@ ifdef DIGEST_FILE
 	buildah push --digestfile "$(DIGEST_FILE)" "$(CONTAINER_REPO):$(IMAGE_TAG)" "docker://$(CONTAINER_REPO):$(IMAGE_TAG)"
 else
 	buildah push "$(CONTAINER_REPO):$(IMAGE_TAG)"
+endif
+
+.PHONY: manifest-push
+manifest-push:
+	@echo "==> Assembling manifest list $(CONTAINER_REPO):$(IMAGE_TAG) from arches: $(ARCHS)"
+	buildah manifest create "$(CONTAINER_REPO):$(IMAGE_TAG)"
+	@for arch in $(ARCHS); do \
+		buildah manifest add "$(CONTAINER_REPO):$(IMAGE_TAG)" "docker://$(CONTAINER_REPO):$(IMAGE_TAG)-$$arch"; \
+	done
+ifdef DIGEST_FILE
+	buildah manifest push --digestfile "$(DIGEST_FILE)" --rm "$(CONTAINER_REPO):$(IMAGE_TAG)" "docker://$(CONTAINER_REPO):$(IMAGE_TAG)"
+else
+	buildah manifest push --rm "$(CONTAINER_REPO):$(IMAGE_TAG)" "docker://$(CONTAINER_REPO):$(IMAGE_TAG)"
 endif
 
 .PHONY: container-run
