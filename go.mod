@@ -3,7 +3,7 @@ module github.com/aardbol/cert-manager-webhook-bunny
 go 1.26.8
 
 require (
-	github.com/cert-manager/cert-manager v1.21.1
+	github.com/cert-manager/cert-manager v1.21.2
 	k8s.io/apiextensions-apiserver v0.36.4
 	k8s.io/apimachinery v0.36.4
 	k8s.io/client-go v0.36.4
