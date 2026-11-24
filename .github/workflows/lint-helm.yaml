@@ -23,4 +23,4 @@ permissions:
 
 jobs:
   helm-lint:
-    uses: upcloud-tools/gha-actions/.github/workflows/lint-helm.yaml@c0df829cbad57268497db8cfb6174419f925b283
+    uses: upcloud-tools/gha-actions/.github/workflows/lint-helm.yaml@f2881d6a065803a93a5af104f83413f4b6f31ca0 # 2026-08-27

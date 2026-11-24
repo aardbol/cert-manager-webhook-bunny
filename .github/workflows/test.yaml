@@ -28,4 +28,4 @@ permissions:
 
 jobs:
   test:
-    uses: upcloud-tools/gha-actions/.github/workflows/test-go.yaml@c0df829cbad57268497db8cfb6174419f925b283
+    uses: upcloud-tools/gha-actions/.github/workflows/test-go.yaml@f2881d6a065803a93a5af104f83413f4b6f31ca0 # 2026-08-27

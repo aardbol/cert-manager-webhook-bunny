@@ -53,7 +53,7 @@ jobs:
   release-helm:
     needs: [detect, integration]
     if: ${{ always() && needs.detect.outputs.skip == 'false' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
-    uses: upcloud-tools/gha-actions/.github/workflows/release-helm-chart.yaml@c0df829cbad57268497db8cfb6174419f925b283
+    uses: upcloud-tools/gha-actions/.github/workflows/release-helm-chart.yaml@f2881d6a065803a93a5af104f83413f4b6f31ca0 # 2026-08-27
     with:
       chart_version: ${{ needs.detect.outputs.chart_version }}
     secrets: inherit
