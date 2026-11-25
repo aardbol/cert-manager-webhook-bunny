@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-11-25
+
+### Changed
+
+- Bump Go toolchain from v1.26.8 to v1.27.4.
+- Bump `github.com/cert-manager/cert-manager` from v1.21.2 to v1.21.3.
+- Bump `go.opentelemetry.io/otel/exporters/otlp/otlptrace` from v1.40.0 to v1.47.0.
+- Bump `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc` from v1.40.0 to v1.47.0.
+- Bump indirect dependencies to implement security updates.
+- CI: bump `upcloud-tools/gha-actions` shared workflows and composite-actions submodule to `f2881d6` (2026-08-27).
+- CI: bump golangci-lint to v2.15.0 for Go 1.27 compatibility.
+
+### Security
+
+- Fix Go standard library vulnerabilities (including CVE-2026-111943, CVE-2026-97031, CVE-2026-78667 and CVE-2026-78669) by building with Go 1.27.4.
+- Fix `golang.org/x/net/html` denial of service (CVE-2026-78661) and cross-site scripting (CVE-2026-97045) by bumping `golang.org/x/net` to v0.63.0.
+- Fix OpenTelemetry exporter configuration logging information disclosure (GHSA-8wmf-6v46-5gfg) by bumping the OTLP trace exporters to v1.47.0.
+
 ## [1.4.1] - 2026-09-05
 
 ### Added
